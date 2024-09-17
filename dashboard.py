@@ -83,15 +83,6 @@ def main():
     if not data.empty:
         summarized_data = calculate_summarized_metrics(data, type_to_analyze, "")
         st.write("Summarized Metrics", summarized_data)
-        
-
-    # Title for Radar Chart
-    st.write("## Radar Chart")
-
-    fig_radar = create_radar_chart(summarized_data)
-    if fig_radar:
-        # Display the figure
-        st.pyplot(fig_radar)
 
     # Title for the boxplot
     st.write("## Boxplot")
@@ -125,6 +116,14 @@ def main():
 
     # Display the filtered data
     #st.write("Raw Data", data)
+
+    # Title for Radar Chart
+    st.write("## Radar Chart")
+
+    fig_radar = create_radar_chart(summarized_data)
+    if fig_radar:
+        # Display the figure
+        st.pyplot(fig_radar)
 
 if __name__ == "__main__":
     main()
