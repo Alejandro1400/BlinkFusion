@@ -1,0 +1,12 @@
+# Ignore directory for data
+Data/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Cache files
+*.cache
+
+# Ignore Microsoft Word documents
+*.docx
