@@ -8,36 +8,45 @@ import plotly.graph_objects as go
 
 from Dashboard.Radar import ComplexRadar
 
-def create_boxplot(data, x_label, y_label):
+def remove_outliers(df, column):
+    """
+    Remove outliers based on the IQR method.
+    """
+    Q1 = df[column].quantile(0.30)
+    Q3 = df[column].quantile(0.70)
+    IQR = Q3 - Q1
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+    
+    # Filtering the data
+    filtered_df = df[(df[column] >= lower_bound) & (df[column] <= upper_bound)]
+    return filtered_df
 
+def create_boxplot(data, x_label, y_label, outliers):
     # Apply the appropriate aggregation based on y_label
     if y_label == 'Gaps':
-        # Only keep the columns Sample, Cell, and y_label
         data = data[['Sample', 'Cell', y_label]]
         data = data.groupby(['Sample', 'Cell']).sum().reset_index()
     elif y_label in ['Network', 'Contour']:
-        # Only keep the columns Sample, Cell, and y_label
         data = data[['Sample', 'Cell', y_label]]
         data = data[data[y_label] != 0]
         data = data.groupby(['Sample', 'Cell']).nunique().reset_index()
     elif y_label == 'Gaps/Cont':
-        # Only keep the columns Sample, Cell, and y_label
         data = data[['Sample', 'Cell', 'Gaps', 'Contour']]
-        aggregations = {
-            'Gaps': 'sum',
-            'Contour': 'count'
-        }
-        data = data.groupby(['Sample', 'Cell']).agg(aggregations).reset_index()
+        data = data.groupby(['Sample', 'Cell']).agg({'Gaps': 'sum', 'Contour': 'count'}).reset_index()
         data['Gaps/Cont'] = data['Gaps'] / data['Contour']
     elif y_label == 'Netw/Cont':
-        # Only keep the columns Sample, Cell, and y_label
         data = data[['Sample', 'Cell', 'Network', 'Contour']]
         data = data.groupby(['Sample', 'Cell']).nunique().reset_index()
         data['Netw/Cont'] = data['Network'] / data['Contour']
+    
+    if outliers == True:
+        # Remove outliers
+        data = remove_outliers(data, y_label)
 
-    # Sort data based on the sort parameter
+    # Sort data
     data = data.sort_values(by=[y_label], ascending=True)
-
+    
     # Set the y-axis label
     y_axis = y_label
 
@@ -59,12 +68,12 @@ def create_boxplot(data, x_label, y_label):
                      labels={'Cell': 'Cell Name'}, points=False, 
                      title=f'Boxplot of {y_label} by {x_label}')
         # Customize hover data to show the cell name
-        fig.update_traces(hoverinfo='y+name')
+        fig.update_traces(hoverinfo='y+name', whiskerwidth=0.2)
     else:
         # Normal boxplot for Sample grouping
         fig = px.box(data, x=x_label, y=y_label, points=False,
                      title=f'Boxplot of {y_label} by {x_label}')
-        fig.update_traces(hoverinfo='y')
+        fig.update_traces(hoverinfo='y', whiskerwidth=0.2)
 
     # Update layout
     fig.update_layout(
@@ -74,6 +83,7 @@ def create_boxplot(data, x_label, y_label):
     )
     
     return fig
+
 
 def create_histogram(data, x_label, bins, title, histtype='step'):
     # Grab only from where Sample corresponds to the title

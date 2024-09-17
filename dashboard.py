@@ -97,11 +97,12 @@ def main():
     st.write("## Boxplot")
 
     # Do 2 columns for selection
-    col3, col4 = st.columns(2)
+    col3, col4, col9 = st.columns(3)
     
     x_label_box = col3.selectbox("Select X label for Boxplot", X_AXIS_BOX, index=0)
     y_label_box = col4.selectbox("Select Y label for Boxplot", COLUMN_GRAPH, index=0)
-    fig_box = create_boxplot(data, x_label_box, y_label_box)
+    outliers = col9.checkbox("Remove Outliers", value=False)
+    fig_box = create_boxplot(data, x_label_box, y_label_box, outliers)
     if fig_box:
         # Display the figure
         st.plotly_chart(fig_box, use_container_width=True)
@@ -124,11 +125,6 @@ def main():
 
     # Display the filtered data
     #st.write("Raw Data", data)
-
-    # Add a section explaining what every metric means
-    st.write("## Metric Explanation")
-    st.write("Network: Combination of contours that are connected to each other")
-
 
 if __name__ == "__main__":
     main()
