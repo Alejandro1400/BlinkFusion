@@ -4,7 +4,7 @@ import numpy as np
 import seaborn as sns
 import plotly.express as px
 
-def create_boxplot(data, x_label, y_label, sort):
+def create_boxplot(data, x_label, y_label):
 
     # Apply the appropriate aggregation based on y_label
     if y_label == 'Gaps':
@@ -34,6 +34,16 @@ def create_boxplot(data, x_label, y_label, sort):
     # Sort data based on the sort parameter
     data = data.sort_values(by=[y_label], ascending=True)
 
+    # Set the y-axis label
+    y_axis = y_label
+
+    if y_label in ['Netw/Cont', 'Gaps/Cont']:
+        # Change to percentage and round to 2 decimal places
+        data[y_label] = data[y_label] * 100
+        data[y_label] = np.round(data[y_label], 2)
+        # Change the x_axis to show percentage
+        y_axis = f'{x_label} (%)'
+
     # Plotting based on the x_label
     if x_label == 'Cell':
 
@@ -55,7 +65,7 @@ def create_boxplot(data, x_label, y_label, sort):
     # Update layout
     fig.update_layout(
         xaxis_title=x_label,
-        yaxis_title=y_label,
+        yaxis_title=y_axis,
         boxmode='group'  # Group boxes together based on x-axis categories
     )
     
@@ -92,6 +102,13 @@ def create_histogram(data, x_label, bins, title, histtype='step'):
 
     # Extract data for the histogram
     data_values = data[x_label].values
+
+    if x_label in ['Netw/Cont', 'Gaps/Cont']:
+        # Change to percentage and round to 2 decimal places
+        data_values = data_values * 100
+        data_values = np.round(data_values, 2)
+        # Change the x_label to show percentage
+        x_label = f'{x_label} (%)'
 
     # Set up the figure and axis
     fig, ax = plt.subplots(figsize=(10, 6))

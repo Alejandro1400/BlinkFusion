@@ -67,6 +67,15 @@ def calculate_summarized_metrics(data, type_to_analyze, columns_to_exclude):
     summary['Avg Contrast'] = summary['Avg Contrast'].round(4)
     summary['Avg Sinuosity'] = summary['Avg Sinuosity'].round(4)
 
+    # Change the netw/cont and gaps/cont to percentages with 2 decimal points
+    summary['Netw/Cont'] = (summary['Netw/Cont'] * 100).round(2)
+    summary['Gaps/Cont'] = (summary['Gaps/Cont'] * 100).round(2)
+    # Change name to include percentage
+    summary = summary.rename(columns={
+        'Netw/Cont': 'Netw/Cont (%)',
+        'Gaps/Cont': 'Gaps/Cont (%)'
+    })
+
     #summary.columns = [' '.join(col).strip() for col in summary.columns.values]
 
     
