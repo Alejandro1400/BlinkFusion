@@ -1,8 +1,12 @@
 from matplotlib import pyplot as plt
+import pandas as pd
 from scipy.stats import norm
 import numpy as np
 import seaborn as sns
 import plotly.express as px
+import plotly.graph_objects as go
+
+from Dashboard.Radar import ComplexRadar
 
 def create_boxplot(data, x_label, y_label):
 
@@ -140,4 +144,83 @@ def create_histogram(data, x_label, bins, title, histtype='step'):
     plt.tight_layout()
     plt.show()
 
+    return fig
+
+def calculate_custom_ranges(df, categories):
+    ranges = []
+    for category in categories:
+        max_value = df[category].max()
+        min_value = df[category].min()
+
+        if category == 'Sinuosity':
+            # Sinuosity's min is 1 and max is the closest 0.1 above the max
+            range_min = 1
+            range_max = np.ceil(max_value * 10) / 10  # Rounds up to the nearest 0.1
+        else:
+            if max_value > 100:
+                # Round max to the nearest 10
+                range_max = np.ceil(max_value / 10) * 10
+                increment = 10
+            elif max_value > 10:
+                # Round max to the nearest 5
+                range_max = np.ceil(max_value / 5) * 5
+                increment = 5
+            else:
+                # Round max to the nearest 1
+                range_max = np.ceil(max_value)
+                increment = 1
+
+            # Calculate half of the max value for minimum range consideration
+            half_max = max_value / 2
+
+            if min_value > half_max:
+                # If all values are greater than half of the max, start from half of the max
+                range_min = np.floor(half_max / increment) * increment
+            else:
+                # Otherwise, start from zero
+                range_min = 0
+
+        # Append calculated ranges
+        ranges.append((range_min, range_max))
+
+    return ranges
+
+def create_radar_chart(df, id_column='Sample'):
+
+    # Reset index and rename if necessary
+    if not id_column in df.columns:
+        df = df.reset_index().rename(columns={'index': id_column})
+
+    # Remove unnecessary columns if they exist
+    columns_to_remove = ['Cell', 'Avg # Contours', 'Avg # Networks', 'Avg # Gaps']
+    df = df.drop(columns=[col for col in columns_to_remove if col in df.columns], errors='ignore')
+
+    # Calculate Fill Index (%) as the opposite of Gaps/Cont
+    df['Fill Index (%)'] = 100 - df['Gaps/Cont (%)']
+
+    # Remove Gaps/Cont column
+    df = df.drop(columns=['Gaps/Cont (%)'], errors='ignore')
+
+    df = df.rename(columns={
+        'Avg Length': 'Length',
+        'Avg Line Width': 'Line Width',
+        'Avg Intensity': 'Intensity',
+        'Avg Contrast': 'Contrast',
+        'Avg Sinuosity': 'Sinuosity',
+        'Netw/Cont (%)': 'Network Ratio (%)'
+    })
+
+    # Identify and retain numeric columns only for plotting
+    categories = df.select_dtypes(include=[np.number]).columns.tolist()
+
+    # Obtain the ranges for each category, which are the min value to max value
+    ranges = calculate_custom_ranges(df, categories)
+
+    fig, ax = plt.subplots(subplot_kw=dict(polar=True), figsize=(6, 6))  # Adjusted smaller size here
+    radar = ComplexRadar(fig, categories, ranges)
+    
+    for _, row in df.iterrows():
+        data = row[categories].tolist()
+        radar.plot(data, label=row[id_column])
+    
     return fig

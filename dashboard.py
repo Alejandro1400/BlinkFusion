@@ -7,7 +7,7 @@ import pandas as pd
 from scipy.stats import norm
 
 from Dashboard.data_management import load_and_prepare_data
-from Dashboard.graphs import create_boxplot, create_histogram
+from Dashboard.graphs import create_boxplot, create_histogram, create_radar_chart
 from Dashboard.metrics import calculate_summarized_metrics
 from Data_access.file_explorer import *
 
@@ -32,6 +32,13 @@ def main():
 
     st.sidebar.header("Data Filtering")
     data = load_and_prepare_data()  # Load data before starting Streamlit
+
+    # Grab the columns sample and cell and get all the unique values for each and join them as a string
+    sample_cell = data[['Sample', 'Cell']].apply(lambda x: ' '.join(x), axis=1).unique().tolist()
+    # Show them in a multiselect
+    selected_sample_cell = st.sidebar.multiselect("Exclude Sample and Cell", sample_cell)
+    # Filter out the sample and cell from the non selected ones
+    data = data[~data[['Sample', 'Cell']].apply(lambda x: ' '.join(x), axis=1).isin(selected_sample_cell)]
 
     if data.empty:
         st.write("No data available.")
@@ -61,13 +68,6 @@ def main():
         elif isinstance(value, list):
             data = data[data[col].isin(value)]
 
-    # Grab the columns sample and cell and get all the unique values for each and join them as a string
-    sample_cell = data[['Sample', 'Cell']].apply(lambda x: ' '.join(x), axis=1).unique().tolist()
-    # Show them in a multiselect
-    selected_sample_cell = st.sidebar.multiselect("Select Sample and Cell", sample_cell)
-    # Filter out the sample and cell from the non selected ones
-    data = data[~data[['Sample', 'Cell']].apply(lambda x: ' '.join(x), axis=1).isin(selected_sample_cell)]
-
     st.write("# Data Exploration Dashboard")
 
     # Do 2 columns for selection
@@ -83,6 +83,15 @@ def main():
     if not data.empty:
         summarized_data = calculate_summarized_metrics(data, type_to_analyze, "")
         st.write("Summarized Metrics", summarized_data)
+        
+
+    # Title for Radar Chart
+    st.write("## Radar Chart")
+
+    fig_radar = create_radar_chart(summarized_data)
+    if fig_radar:
+        # Display the figure
+        st.pyplot(fig_radar)
 
     # Title for the boxplot
     st.write("## Boxplot")
@@ -114,7 +123,11 @@ def main():
         st.pyplot(fig_hist)
 
     # Display the filtered data
-    st.write("Raw Data", data)
+    #st.write("Raw Data", data)
+
+    # Add a section explaining what every metric means
+    st.write("## Metric Explanation")
+    st.write("Network: Combination of contours that are connected to each other")
 
 
 if __name__ == "__main__":
