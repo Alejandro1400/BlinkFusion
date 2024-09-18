@@ -3,7 +3,6 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import os
-import pandas as pd
 from scipy.stats import norm
 
 from Dashboard.data_management import load_and_prepare_data
@@ -11,19 +10,16 @@ from Dashboard.graphs import create_boxplot, create_histogram, create_radar_char
 from Dashboard.metrics import calculate_summarized_metrics
 from Data_access.file_explorer import *
 
-# Do an array to put as possible values for the selectbox
-# Network, Contour, Length, Line width, Intensity, Contrast, Sinuosity, Gaps
 COLUMN_FILTER = ['Network', 'Contour', 'Length', 'Line width', 'Intensity', 'Contrast', 'Sinuosity', 'Gaps']
 COLUMN_GRAPH = COLUMN_FILTER + ['Netw/Cont', 'Gaps/Cont']
-# Do an array to put as possible values for the x axis of the boxplot
-# Sample, Cell
 X_AXIS_BOX = ['Sample', 'Cell']
 
-
-
-# Initialize session state variables
-if 'active_filters' not in st.session_state:
-    st.session_state.active_filters = {}
+@st.cache_data
+def prepare_data():
+    data = load_and_prepare_data()
+    data['Sample_Cell'] = data[['Sample', 'Cell']].agg(' '.join, axis=1)
+    print('hola')
+    return data
 
 
 def main():
@@ -31,7 +27,7 @@ def main():
     st.set_page_config(layout="wide")
 
     st.sidebar.header("Data Filtering")
-    data = load_and_prepare_data()  # Load data before starting Streamlit
+    data = prepare_data()  # Load data before starting Streamlit
 
     # Grab the columns sample and cell and get all the unique values for each and join them as a string
     sample_cell = data[['Sample', 'Cell']].apply(lambda x: ' '.join(x), axis=1).unique().tolist()
