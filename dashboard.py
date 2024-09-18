@@ -7,9 +7,11 @@ from scipy.stats import norm
 
 from Dashboard.data_management import load_and_prepare_data
 from Dashboard.graphs import create_boxplot, create_histogram, create_radar_chart
-from Dashboard.metrics import calculate_summarized_metrics
+from Dashboard.metrics import calculate_summarized_metrics, calculate_summarized_metrics_2
 from Data_access.file_explorer import *
 
+# Constants
+ALL_COLUMNS = ['Sample', 'Cell', 'Network', 'Contour', 'Length', 'Line width', 'Intensity', 'Contrast', 'Sinuosity', 'Gaps']
 COLUMN_FILTER = ['Network', 'Contour', 'Length', 'Line width', 'Intensity', 'Contrast', 'Sinuosity', 'Gaps']
 COLUMN_GRAPH = COLUMN_FILTER + ['Netw/Cont', 'Gaps/Cont']
 X_AXIS_BOX = ['Sample', 'Cell']
@@ -23,27 +25,20 @@ def prepare_data():
 
 
 def main():
-    # Set page to wide mode
     st.set_page_config(layout="wide")
-
-    st.sidebar.header("Data Filtering")
     data = prepare_data()  # Load data before starting Streamlit
 
-    # Grab the columns sample and cell and get all the unique values for each and join them as a string
-    sample_cell = data[['Sample', 'Cell']].apply(lambda x: ' '.join(x), axis=1).unique().tolist()
-    # Show them in a multiselect
+    st.sidebar.header("Data Filtering")
+
+    sample_cell = data['Sample_Cell'].unique().tolist()
     selected_sample_cell = st.sidebar.multiselect("Exclude Sample and Cell", sample_cell)
-    # Filter out the sample and cell from the non selected ones
-    data = data[~data[['Sample', 'Cell']].apply(lambda x: ' '.join(x), axis=1).isin(selected_sample_cell)]
+    data = data[~data['Sample_Cell'].isin(selected_sample_cell)]
 
     if data.empty:
         st.write("No data available.")
         return
-    
 
-    # Generate sidebar widgets based on column data types
-    all_columns = data.columns.tolist()
-    selected_columns = st.sidebar.multiselect('Select Columns to Filter', all_columns)
+    selected_columns = st.sidebar.multiselect('Select Columns to Filter', ALL_COLUMNS)
     filters = {}
 
     for col in selected_columns:
@@ -66,60 +61,60 @@ def main():
 
     st.write("# Data Exploration Dashboard")
 
-    # Do 2 columns for selection
+
+    # summarized metrics section
+    st.write("## Summarized Metrics")
     col1, col2 = st.columns(2)
-
-    # In col1 ask do a selectbox for 'Type to analyze', possible values 'Sample' and 'Cell', default to 'Sample'
     type_to_analyze = col1.selectbox("Select Type to Analyze", ['Sample', 'Cell'], index=0)
-
-    # In col2 ask do a selectbox for columns to exclude. It can exclude every single one except the one selected in col1 
     #columns_to_exclude = col2.multiselect("Select Columns to Exclude", COLUMN_FILTER)
 
-    # Calculate and display summarized metrics
     if not data.empty:
         summarized_data = calculate_summarized_metrics(data, type_to_analyze, "")
-        st.write("Summarized Metrics", summarized_data)
+        summarized_data_2  = calculate_summarized_metrics_2(data, 'Sample', "")
+        st.write(summarized_data_2)
 
-    # Title for the boxplot
+
+    # Boxplot section
     st.write("## Boxplot")
 
-    # Do 2 columns for selection
-    col3, col4, col9 = st.columns(3)
+    col3, col4, col5 = st.columns(3)
     
     x_label_box = col3.selectbox("Select X label for Boxplot", X_AXIS_BOX, index=0)
     y_label_box = col4.selectbox("Select Y label for Boxplot", COLUMN_GRAPH, index=0)
-    outliers = col9.checkbox("Remove Outliers", value=False)
+    outliers = col5.checkbox("Remove Outliers", value=False)
     fig_box = create_boxplot(data, x_label_box, y_label_box, outliers)
     if fig_box:
-        # Display the figure
         st.plotly_chart(fig_box, use_container_width=True)
 
-    # Title for the histogram
+
+    # Histogram section
     st.write("## Histogram")
 
     # Do 3 columns for selection
-    col5, col6, col7, col8 = st.columns(4)
+    col6, col7, col8, col9 = st.columns(4)
 
-    x_label_hist = col5.selectbox("Select X label for Histogram", COLUMN_GRAPH, index=0)
-    sample = col6.selectbox("Select Sample for Histogram", data['Sample'].unique(), index=0)
-    bin_count = col7.slider("Select number of bins for Histogram", 1, 50, 10)
-    histtype = col8.selectbox("Select histtype for Histogram", ['bar', 'barstacked', 'step', 'stepfilled'], index=0)
+    x_label_hist = col6.selectbox("Select X label for Histogram", COLUMN_GRAPH, index=0)
+    sample = col7.selectbox("Select Sample for Histogram", data['Sample'].unique(), index=0)
+    bin_count = col8.slider("Select number of bins for Histogram", 1, 50, 10)
+    histtype = col9.selectbox("Select histtype for Histogram", ['bar', 'barstacked', 'step', 'stepfilled'], index=0)
 
     
     fig_hist = create_histogram(data, x_label_hist, bin_count, sample, histtype)
     if fig_hist:
         st.pyplot(fig_hist)
 
+
     # Display the filtered data
     #st.write("Raw Data", data)
 
-    # Title for Radar Chart
+    # Radar chart section
     st.write("## Radar Chart")
 
     fig_radar = create_radar_chart(summarized_data)
     if fig_radar:
         # Display the figure
         st.pyplot(fig_radar)
+
 
 if __name__ == "__main__":
     main()

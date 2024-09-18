@@ -22,6 +22,7 @@ def remove_outliers(df, column):
     filtered_df = df[(df[column] >= lower_bound) & (df[column] <= upper_bound)]
     return filtered_df
 
+
 def create_boxplot(data, x_label, y_label, outliers):
     # Apply the appropriate aggregation based on y_label
     if y_label == 'Gaps':
