@@ -12,3 +12,4 @@ __pycache__/
 *.docx
 
 # Ignore Auth data file
+auth_info.txt
