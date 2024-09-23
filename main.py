@@ -2,6 +2,7 @@ import os
 from tkinter import filedialog
 import tkinter as tk
 from Analysis.analytics_ridge_pipeline import analyze_data
+from Data_access import box_connection
 from Data_access.file_explorer import *
 
 def main():
@@ -15,7 +16,14 @@ def main():
     print("2: File Explorer")
     user_choice = input("Type '1' to use Box or '2' to use File Explorer: ")
 
-    if user_choice == '2':
+    if user_choice == '1':
+            print("\nBox selected.")
+            auth_file = find_item(item_name='auth_info.txt', is_folder=False)
+            box_client = box_connection.box_signin(auth_file)
+            if box_client:
+                # Proceed with further operations using the `box_client` if needed
+                pass
+    elif user_choice == '2':
         print("\nFile Explorer selected.")
         print("1: Process Data")
         print("2: Use Dashboard")
@@ -42,8 +50,6 @@ def main():
             else:
                 print("No folder selected.")
 
-    elif user_choice == '1':
-        print("Box integration is not implemented yet.")
     else:
         print("Invalid option selected.")
 

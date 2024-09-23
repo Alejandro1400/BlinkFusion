@@ -108,13 +108,31 @@ def save_processed_data(results, original_folder_path, results_folder_path):
     """Save the results to the specified folder path with 'filename' + Processed.csv."""
     results.to_csv(os.path.join(results_folder_path, f'{filename}_Processed.csv'), index=False)
 
-def find_data_folder(base_directory=None):
+
+def find_item(base_directory=None, item_name="Data", is_folder=True):
+    """
+    Search for a folder or file within the directory tree starting from the base directory.
+    
+    Args:
+    base_directory (str): The starting directory for the search.
+    item_name (str): The name of the folder or file to find.
+    is_folder (bool): Flag indicating whether to search for a folder (True) or a file (False).
+
+    Returns:
+    str: The full path to the folder or file if found.
+
+    Raises:
+    FileNotFoundError: If the specified folder or file is not found.
+    """
     if base_directory is None:
         base_directory = os.getcwd()  # Use current working directory if no base is provided
 
-    # Walk through the directory tree starting from the base directory
     for root, dirs, files in os.walk(base_directory):
-        if 'Data' in dirs:
-            return os.path.join(root, 'Data')  # Return the full path to 'Data' directory
+        # Check directories only if is_folder is True
+        if is_folder and item_name in dirs:
+            return os.path.join(root, item_name)
+        # Check files only if is_folder is False
+        elif not is_folder and item_name in files:
+            return os.path.join(root, item_name)
 
-    raise FileNotFoundError("Data folder not found within the project structure.")
+    raise FileNotFoundError(f"{item_name} not found within the project structure.")
