@@ -10,3 +10,5 @@ __pycache__/
 
 # Ignore Microsoft Word documents
 *.docx
+
+# Ignore Auth data file
