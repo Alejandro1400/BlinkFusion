@@ -1,3 +1,4 @@
+import json
 import os
 from tkinter import filedialog
 import tkinter as tk
@@ -21,8 +22,25 @@ def main():
             auth_file = find_item(item_name='auth_info.txt', is_folder=False)
             box_client = box_connection.box_signin(auth_file)
             if box_client:
-                # Proceed with further operations using the `box_client` if needed
-                pass
+                database_json = box_connection.database_stats(box_client, root_dir='Filament Data')
+                # Print folder names from the JSON
+                data = json.loads(database_json)
+                print("\nFolder Names:")
+                for date in data['dates']:
+                    print(f"Date: {date['date_name']} Id: {date['date_id']}")
+                    for sample in date['samples']:
+                        print(f"  Sample: {sample['sample_name']} Id: {sample['sample_id']}")
+                        for cell in sample['cells']:
+                            print(f"    Cell: {cell['cell_name']} Id: {cell['cell_id']}")
+
+
+
+
+
+
+
+
+
     elif user_choice == '2':
         print("\nFile Explorer selected.")
         print("1: Process Data")
