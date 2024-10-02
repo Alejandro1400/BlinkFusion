@@ -108,3 +108,31 @@ def find_folder_in_box(box_client, folder_name, source_folder=None):
     except Exception as e:
         print(f"Failed to find folder '{folder_name}': {e}")
         return None
+    
+
+def change_item_name(box_client, item_id, new_name, item_type='file'):
+    """
+    Change the name of a file or folder in Box.
+
+    Args:
+    box_client (Client): The Box client authenticated with the user's access token.
+    item_id (str): The ID of the file or folder to rename.
+    new_name (str): The new name for the file or folder.
+    item_type (str): Type of the item, either 'file' or 'folder'.
+
+    Returns:
+    None
+    """
+    try:
+        if item_type == 'file':
+            item = box_client.file(file_id=item_id)
+        elif item_type == 'folder':
+            item = box_client.folder(folder_id=item_id)
+        else:
+            print("Invalid item type specified. Use 'file' or 'folder'.")
+            return
+
+        updated_item = item.update_info(data={'name': new_name})
+        print(f"{item_type.capitalize()} name changed to: {updated_item.name}")
+    except Exception as e:
+        print(f"Failed to rename {item_type}: {e}")    

@@ -3,7 +3,7 @@ import tkinter as tk
 from tkinter import filedialog, simpledialog
 import pandas as pd
 from skimage import io
-from Analysis.analytics_ridge_pipeline import analyze_data
+from Analysis.SOAC.analytics_ridge_pipeline import analyze_data
 
 
 def load_data_processing(folder_path):
