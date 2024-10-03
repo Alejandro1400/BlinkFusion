@@ -88,7 +88,7 @@ def main():
         file_path = filedialog.askopenfilename(title="Select File for Processing", filetypes=[("Tiff Files", "*.tiff *.tif")])
         if file_path:
             config_path = find_item(item_name='ridge_detector_param.json', is_folder=False)
-            detect_ridges(file_path, config_path)
+            preprocessing_image_selection(file_path, config_path, num_ROIs=16)
         else:
             print("No file selected.")  
 
