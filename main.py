@@ -2,6 +2,7 @@ import json
 import os
 from tkinter import filedialog
 import tkinter as tk
+from Analysis.SOAC.preprocessing_image_selection import *
 from Analysis.SOAC.analytics_ridge_pipeline import analyze_data
 from Analysis.STORM.analytics_storm_pipeline import analyze_data_storm
 from Data_access import box_connection
@@ -82,6 +83,15 @@ def main():
                 print("Data processed.")
             else:
                 print("No file selected.")
+
+    elif user_choice == '3':
+        file_path = filedialog.askopenfilename(title="Select File for Processing", filetypes=[("Tiff Files", "*.tiff *.tif")])
+        if file_path:
+            config_path = find_item(item_name='ridge_detector_param.json', is_folder=False)
+            detect_ridges(file_path, config_path)
+        else:
+            print("No file selected.")  
+
 
     else:
         print("Invalid option selected.")
