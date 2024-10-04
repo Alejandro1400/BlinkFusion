@@ -86,7 +86,7 @@ def ridge_detection_params(img, config, line_width=3):
     std_intensity = np.std(np.array(img))
 
     # Lower contrast is the mean intensity and high contrast is the mean plus std deviation
-    lower_contrast = mean_intensity
+    lower_contrast = mean_intensity 
     higher_contrast = mean_intensity + std_intensity
 
     # Calculate sigma, lower threshold, and upper threshold
@@ -171,12 +171,16 @@ def detect_ridges(img, config):
     return metrics
 
 
-def preprocessing_image_selection(image_path, config_file, scaling_method='robust', num_ROIs=None, ROI_size=None):
+def preprocessing_image_selection(image_path, config_file, scaling_method='min_max', num_ROIs=None, ROI_size=None):
     # Load the configuration
     config = load_json(config_file)
 
     # Prepare the image
     image = prepare_image(image_path)
+
+    image.show()
+    # Save
+    image.save("original_image.tiff")
 
     # Select ROIs from the image
     ROIs = select_ROIs(image, num_ROIs=num_ROIs, ROI_size=ROI_size)
@@ -197,37 +201,100 @@ def preprocessing_image_selection(image_path, config_file, scaling_method='robus
     
     # Names and initial weights for the metrics
     metric_names = ["Number of Ridges", "Ridge/Junction Ratio", "Mean Length", "CV Length", "Mean Intensity", "CV Width"]
-    weights = np.array([30, 30, 15, 15, 5, 5]) / 100.0
+    weights = np.array([35, 35, 10, 10, 5, 5]) / 100.0
 
-    # Apply scaling according to the specified method
-    if scaling_method == 'min_max':
-        min_vals = np.min(all_metrics, axis=0)
-        max_vals = np.max(all_metrics, axis=0)
-        scaled_metrics = (all_metrics - min_vals) / (max_vals - min_vals)
-    elif scaling_method == 'standard':
-        mean_vals = np.mean(all_metrics, axis=0)
-        std_vals = np.std(all_metrics, axis=0)
-        scaled_metrics = (all_metrics - mean_vals) / std_vals
-    elif scaling_method == 'robust':
-        medians = np.median(all_metrics, axis=0)
-        iqr = np.percentile(all_metrics, 75, axis=0) - np.percentile(all_metrics, 25, axis=0)
-        scaled_metrics = (all_metrics - medians) / iqr
-        
+    min_vals = np.min(all_metrics, axis=0)
+    max_vals = np.max(all_metrics, axis=0)
+    scaled_metrics = (all_metrics - min_vals) / (max_vals - min_vals)
     for i in range(all_metrics.shape[1]):
         if metric_names[i].startswith('CV'):  # Invert scaling for 'CV' metrics
-            scaled_metrics[:, i] = -scaled_metrics[:, i]
+            scaled_metrics[:, i] = 1-scaled_metrics[:, i]
 
     # Calculate ROI Quality for each ROI
     roi_qualities = np.dot(scaled_metrics, weights)
 
+    # Filter out ROIs with quality < 0.4
+    high_quality_indices = roi_qualities >= 0.4
+    filtered_ROIs = np.array(ROIs)[high_quality_indices]
+    filtered_metrics = all_metrics[high_quality_indices]
+    filtered_scaled_metrics = scaled_metrics[high_quality_indices]
+    filtered_roi_qualities = roi_qualities[high_quality_indices]
+
     # Print the results in a table
     headers = ["Metric", "Real Value", "Scaled Value"]
-    for roi, metrics, scaled_metrics, quality in zip(ROIs, all_metrics, scaled_metrics, roi_qualities):
-        print(f"ROI: {roi}")
-        table = []
-        for name, metric, scaled_metric in zip(metric_names, metrics, scaled_metrics):
-            table.append([name, f"{metric:.2f}", f"{scaled_metric:.2f}"])
-        print(tabulate(table, headers=headers, tablefmt="grid"))
-        print(f"ROI Quality: {quality:.2f}\n")
+    print("Min max scaling")
+    for roi, quality in zip(filtered_ROIs, filtered_roi_qualities):
+        print(f"ROI: {roi}, Quality: {quality:.2f}")
+        print("\n")
+
+    # Create a mask image with a black background (or any other color)
+    masked_image = Image.new('I', image.size, 0)
+
+    # Copy only high-quality ROIs to the masked image
+    for roi in filtered_ROIs:
+        crop_area = image.crop(roi)
+        masked_image.paste(crop_area, roi)
+
+    # Save or show the resulting image
+    masked_image.show()
+    masked_image.save("high_quality_ROIs_min_max.tiff")
+
+
+    # Set new weights for the metrics
+    weights = np.array([35, 20, 25, 10, 5, 5]) / 100.0
+
+    # Standard scale the metrics
+    scaled_metrics = (filtered_metrics - np.mean(filtered_metrics, axis=0)) / np.std(filtered_metrics, axis=0)
+
+    # Calculate ROI Quality for each ROI
+    roi_qualities = np.dot(scaled_metrics, weights)
+
+    # Filter out ROIs with negative quality
+    high_quality_indices = roi_qualities >= 0
+    filtered_ROIs = filtered_ROIs[high_quality_indices]
+    filtered_metrics = filtered_metrics[high_quality_indices]
+    filtered_scaled_metrics = scaled_metrics[high_quality_indices]
+    filtered_roi_qualities = roi_qualities[high_quality_indices]
+
+    # Print the results in a table
+    headers = ["Metric", "Real Value", "Scaled Value"]
+    print("Standard scaling")
+    for roi, filtered_metric, filtered_scaled_metric, quality in zip(filtered_ROIs, filtered_metrics, filtered_scaled_metrics, filtered_roi_qualities):
+        print(f"ROI: {roi}, Quality: {quality:.2f}")
+        print("Metrics: ")
+        print(filtered_metric)
+        print ("Scaled Metrics: ")
+        print(filtered_scaled_metric)
+        print("\n")
+
+    # Create a mask image with a black background (or any other color)
+    masked_image = Image.new('I', image.size, 0)
+
+    # Copy only high-quality ROIs to the masked image
+    for roi in filtered_ROIs:
+        crop_area = image.crop(roi)
+        masked_image.paste(crop_area, roi)
+
+    # Save or show the resulting image
+    masked_image.show()
+    masked_image.save("high_quality_ROIs.tiff")
+
+    #Filter out top 3 ROIs
+    top_ROIs = filtered_ROIs[np.argsort(filtered_roi_qualities)[::-1][:3]]
+
+    # Create a mask image with a black background (or any other color)
+    masked_image = Image.new('I', image.size, 0)
+
+    # Copy only top 3 ROIs to the masked image
+    for roi in top_ROIs:
+        crop_area = image.crop(roi)
+        masked_image.paste(crop_area, roi)
+
+    # Save or show the resulting image
+    masked_image.show()
+    # Save the image
+    masked_image.save("top_3_ROIs.tiff")
+
+
 
     
