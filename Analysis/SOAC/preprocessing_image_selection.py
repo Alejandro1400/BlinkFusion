@@ -4,6 +4,7 @@ from ridge_detection.params import Params, load_json
 from ridge_detection.helper import displayContours
 from PIL import Image
 from mrcfile import open as mrcfile_open
+from tabulate import tabulate
 
 
 def prepare_image(image_path):
@@ -22,24 +23,16 @@ def prepare_image(image_path):
 
     # Convert the numpy array to an image
     img = Image.fromarray(img)
-
-    # Print the image mean intensity, area, min and max intensity
-    print(f"Image Mean Intensity: {np.mean(np.array(img))}")
-    print(f"Image Area: {img.size}")
-    print(f"Image Min Intensity: {np.min(np.array(img))}")
-    print(f"Image Max Intensity: {np.max(np.array(img))}")
-    
     
     # Convert image to 8-bit if it is 16-bit
     if img.mode != 'I':
         img = img.convert('I')
 
-        array = np.uint8(np.array(img) / 256)
-        img = Image.fromarray(array)
+    img_array = np.array(img) 
 
-    # Print the image's intensity mean and standard deviation
-    print(f"Image Mean Intensity: {np.mean(np.array(img))}")
-    print(f"Image Standard Deviation: {np.std(np.array(img))}")
+    # Normalize the image to 8-bit
+    img_array = (img_array - np.min(img_array)) / (np.max(img_array) - np.min(img_array)) * 255
+    img = Image.fromarray(img_array.astype(np.uint8))
 
     return img
 
@@ -88,8 +81,6 @@ def select_ROIs(img, num_ROIs=None, ROI_size=None):
 
 
 def ridge_detection_params(img, config, line_width=3):
-    # Obtain the mean pixel intensity value of the image
-    image_array = np.array(img)
     mean_intensity = np.mean(np.array(img))
     #Obtain the standard deviation of the pixel intensity values of the image
     std_intensity = np.std(np.array(img))
@@ -121,13 +112,17 @@ def ridge_detection_params(img, config, line_width=3):
     return config
 
 
-
 def ridges_statistics(ridges, junctions):
-    # Calculate number of ridges
+    # Calculate number of ridges and junctions
     num_ridges = len(ridges)
+    num_junctions = len(junctions)
+    # Calculate Ridge/Junction Ratio
+    ridge_junction_ratio = num_ridges / num_junctions if num_junctions > 0 else 0
     
     # Calculate total length of each ridge and average length
     total_length = 0
+    average_widths = []
+    mean_intensities = []
     for ridge in ridges:
         x_coords = ridge.col
         y_coords = ridge.row
@@ -136,12 +131,26 @@ def ridges_statistics(ridges, junctions):
                      for i in range(1, len(x_coords)))
         total_length += length
 
-    average_length = total_length / num_ridges if num_ridges > 0 else 0
+        avg_width = np.mean(ridge.width_l + ridge.width_r)
+        average_widths.append(avg_width)
 
-    # Count the number of junctions
-    num_junctions = len(junctions)
+        mean_intensity = np.mean(ridge.intensity)
+        mean_intensities.append(mean_intensity)
+    
+    # Calculate mean length and coefficient of variation
+    mean_length = total_length / num_ridges if num_ridges > 0 else 0
+    cv_length = np.std(average_widths) / np.mean(average_widths) if np.mean(average_widths) != 0 else 0
+    mean_intensity = np.mean(mean_intensities)
+    cv_width = np.std(average_widths) / np.mean(average_widths) if np.mean(average_widths) != 0 else 0
+    
+    # Normalize the values using Min-Max normalization (0-1 scaling)
+    metrics = np.array([num_ridges, ridge_junction_ratio, mean_length, cv_length, mean_intensity, cv_width])
+    #metric_names = ["Number of Ridges", "Ridge/Junction Ratio", "Mean Length", "CV Length", "Mean Intensity", "CV Width"]
 
-    return num_ridges, average_length, num_junctions
+    # Printing metrics with names
+    #print("Metrics: ", " ".join([f"{name}: {metric:.2f}" for name, metric in zip(metric_names, metrics)]))
+
+    return metrics
 
 
 def detect_ridges(img, config):
@@ -156,13 +165,13 @@ def detect_ridges(img, config):
     resultJunction = detect.junctions
 
     # Ridge statistics
-    num_ridges, avg_length, num_junctions = ridges_statistics(result, resultJunction)
-
+    metrics = ridges_statistics(result, resultJunction)
+    
     # Return the detection results
-    return num_ridges, avg_length, num_junctions
+    return metrics
 
 
-def preprocessing_image_selection(image_path, config_file, num_ROIs=None, ROI_size=None):
+def preprocessing_image_selection(image_path, config_file, scaling_method='robust', num_ROIs=None, ROI_size=None):
     # Load the configuration
     config = load_json(config_file)
 
@@ -173,17 +182,52 @@ def preprocessing_image_selection(image_path, config_file, num_ROIs=None, ROI_si
     ROIs = select_ROIs(image, num_ROIs=num_ROIs, ROI_size=ROI_size)
 
     # Initialize list to hold detection results for each ROI
-    detection_results = []
+    metrics_results = []
 
     # Process each ROI
     for roi in ROIs:
         # Crop the image to the ROI
         img = image.crop(roi)
-        num_ridges, avg_length, num_junctions = detect_ridges(img, config)
-        print(f"ROI: {roi}, Num Ridges: {num_ridges}, Avg Length: {avg_length}, Num Junctions: {num_junctions}")
+        roi_metrics = detect_ridges(img, config)
+        metrics_results.append(roi_metrics)
 
-        if num_ridges/num_junctions > 1.5:
-            # Display the original cropped image with a title saying the region 
-            img.show(title=f"ROI: {roi}")
+    # Now that all metrics are collected, we can normalize across all ROIs
+    # Stack all ROI metrics for vectorized operations
+    all_metrics = np.array(metrics_results)
+    
+    # Names and initial weights for the metrics
+    metric_names = ["Number of Ridges", "Ridge/Junction Ratio", "Mean Length", "CV Length", "Mean Intensity", "CV Width"]
+    weights = np.array([30, 30, 15, 15, 5, 5]) / 100.0
 
-    return detection_results
+    # Apply scaling according to the specified method
+    if scaling_method == 'min_max':
+        min_vals = np.min(all_metrics, axis=0)
+        max_vals = np.max(all_metrics, axis=0)
+        scaled_metrics = (all_metrics - min_vals) / (max_vals - min_vals)
+    elif scaling_method == 'standard':
+        mean_vals = np.mean(all_metrics, axis=0)
+        std_vals = np.std(all_metrics, axis=0)
+        scaled_metrics = (all_metrics - mean_vals) / std_vals
+    elif scaling_method == 'robust':
+        medians = np.median(all_metrics, axis=0)
+        iqr = np.percentile(all_metrics, 75, axis=0) - np.percentile(all_metrics, 25, axis=0)
+        scaled_metrics = (all_metrics - medians) / iqr
+        
+    for i in range(all_metrics.shape[1]):
+        if metric_names[i].startswith('CV'):  # Invert scaling for 'CV' metrics
+            scaled_metrics[:, i] = -scaled_metrics[:, i]
+
+    # Calculate ROI Quality for each ROI
+    roi_qualities = np.dot(scaled_metrics, weights)
+
+    # Print the results in a table
+    headers = ["Metric", "Real Value", "Scaled Value"]
+    for roi, metrics, scaled_metrics, quality in zip(ROIs, all_metrics, scaled_metrics, roi_qualities):
+        print(f"ROI: {roi}")
+        table = []
+        for name, metric, scaled_metric in zip(metric_names, metrics, scaled_metrics):
+            table.append([name, f"{metric:.2f}", f"{scaled_metric:.2f}"])
+        print(tabulate(table, headers=headers, tablefmt="grid"))
+        print(f"ROI Quality: {quality:.2f}\n")
+
+    
