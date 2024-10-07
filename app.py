@@ -1,6 +1,6 @@
 # app.py
 import streamlit as st
-from UI.soac_filament import run_soac_ui
+from UI.soac_filament_ui import run_soac_ui
 from UI.sidebar import setup_sidebar
 
 

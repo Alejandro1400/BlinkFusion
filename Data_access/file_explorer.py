@@ -23,6 +23,23 @@ def load_data_processing(folder_path):
     
     return False
 
+def load_data_soac(folder_path):
+    """Check if the specified files exist in the folder_path without a processed file."""
+    required_files = {'.tif'}
+    found_files = set()
+
+    for file in os.listdir(folder_path):
+        for req in required_files:
+            if file.endswith(req):
+                found_files.add(req)
+            elif file.endswith('snakes.csv') or file.endswith('junctions.csv'):
+                return False
+
+    if found_files == required_files:
+        return True
+    
+    return False
+
 def load_data_dashboard(folder_path):
     """Check if the specified files exist in the folder_path."""
     required_files = {'Processed.csv'}
@@ -38,6 +55,7 @@ def load_data_dashboard(folder_path):
     
     return False
 
+
 def folders_for_processing(folder_path):
     """Recursively search and return a list of valid sub-folders."""
     valid_folders = []
@@ -50,6 +68,21 @@ def folders_for_processing(folder_path):
             valid_folders.extend(folders_for_processing(sub_path))  # Recursive call
 
     return valid_folders
+
+
+def folders_for_soac(folder_path):
+    """Recursively search and return a list of valid sub-folders."""
+    valid_folders = []
+    if load_data_soac(folder_path):
+        valid_folders.append(folder_path)
+
+    for subdir in os.listdir(folder_path):
+        sub_path = os.path.join(folder_path, subdir)
+        if os.path.isdir(sub_path):
+            valid_folders.extend(folders_for_soac(sub_path))  # Recursive call
+
+    return valid_folders
+
 
 def folders_for_dashboard(folder_path):
     """Recursively search and return a list of valid sub-folders."""
@@ -109,30 +142,53 @@ def save_processed_data(results, original_folder_path, results_folder_path):
     results.to_csv(os.path.join(results_folder_path, f'{filename}_Processed.csv'), index=False)
 
 
-def find_item(base_directory=None, item_name="Data", is_folder=True):
+def find_item(base_directory=None, item_name=None, is_folder=True, extension=None):
     """
     Search for a folder or file within the directory tree starting from the base directory.
     
     Args:
     base_directory (str): The starting directory for the search.
-    item_name (str): The name of the folder or file to find.
+    item_name (str, optional): The name of the folder or file to find. If None, the first match will be returned.
     is_folder (bool): Flag indicating whether to search for a folder (True) or a file (False).
+    extension (str, optional): The extension of the file to find. If specified, the search will target files with this extension.
 
     Returns:
     str: The full path to the folder or file if found.
 
     Raises:
-    FileNotFoundError: If the specified folder or file is not found.
+    FileNotFoundError: If no folder or file matches the search criteria.
+    ValueError: If more than one file matches the search criteria and item_name is not specified.
     """
     if base_directory is None:
         base_directory = os.getcwd()  # Use current working directory if no base is provided
 
+    matches = []
     for root, dirs, files in os.walk(base_directory):
         # Check directories only if is_folder is True
-        if is_folder and item_name in dirs:
-            return os.path.join(root, item_name)
-        # Check files only if is_folder is False
-        elif not is_folder and item_name in files:
-            return os.path.join(root, item_name)
+        if is_folder:
+            if item_name:
+                if item_name in dirs:
+                    matches.append(os.path.join(root, item_name))
+            else:
+                # If no item name specified, add first directory found to matches
+                if dirs:
+                    matches.append(os.path.join(root, dirs[0]))
+            continue
 
-    raise FileNotFoundError(f"{item_name} not found within the project structure.")
+        # Check files only if is_folder is False
+        if not is_folder:
+            # Filter files by extension if one is provided
+            if extension:
+                files = [f for f in files if f.endswith(f".{extension}")]
+            if item_name:
+                files = [f for f in files if f.split('.')[0] == item_name]
+
+            matches.extend(os.path.join(root, f) for f in files)
+
+    # Handle the cases of no matches or multiple matches
+    if not matches:
+        raise FileNotFoundError("No matching folder or file found within the project structure.")
+    if len(matches) > 1 and not item_name:
+        raise ValueError("Multiple files found. Specify an item name or use a different search criteria.")
+    return matches[0]
+

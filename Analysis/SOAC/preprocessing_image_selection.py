@@ -1,3 +1,4 @@
+import os
 import numpy as np
 from ridge_detection.lineDetector import LineDetector 
 from ridge_detection.params import Params, load_json
@@ -178,9 +179,9 @@ def preprocessing_image_selection(image_path, config_file, scaling_method='min_m
     # Prepare the image
     image = prepare_image(image_path)
 
-    image.show()
+    #image.show()
     # Save
-    image.save("original_image.tiff")
+    #image.save("original_image.tiff")
 
     # Select ROIs from the image
     ROIs = select_ROIs(image, num_ROIs=num_ROIs, ROI_size=ROI_size)
@@ -228,16 +229,16 @@ def preprocessing_image_selection(image_path, config_file, scaling_method='min_m
         print("\n")
 
     # Create a mask image with a black background (or any other color)
-    masked_image = Image.new('I', image.size, 0)
+    #masked_image = Image.new('I', image.size, 0)
 
     # Copy only high-quality ROIs to the masked image
-    for roi in filtered_ROIs:
-        crop_area = image.crop(roi)
-        masked_image.paste(crop_area, roi)
+    #for roi in filtered_ROIs:
+    #    crop_area = image.crop(roi)
+    #    masked_image.paste(crop_area, roi)
 
     # Save or show the resulting image
-    masked_image.show()
-    masked_image.save("high_quality_ROIs_min_max.tiff")
+    #masked_image.show()
+    #masked_image.save("high_quality_ROIs_min_max.tiff")
 
 
     # Set new weights for the metrics
@@ -257,7 +258,6 @@ def preprocessing_image_selection(image_path, config_file, scaling_method='min_m
     filtered_roi_qualities = roi_qualities[high_quality_indices]
 
     # Print the results in a table
-    headers = ["Metric", "Real Value", "Scaled Value"]
     print("Standard scaling")
     for roi, filtered_metric, filtered_scaled_metric, quality in zip(filtered_ROIs, filtered_metrics, filtered_scaled_metrics, filtered_roi_qualities):
         print(f"ROI: {roi}, Quality: {quality:.2f}")
@@ -268,32 +268,72 @@ def preprocessing_image_selection(image_path, config_file, scaling_method='min_m
         print("\n")
 
     # Create a mask image with a black background (or any other color)
-    masked_image = Image.new('I', image.size, 0)
+    #masked_image = Image.new('I', image.size, 0)
 
     # Copy only high-quality ROIs to the masked image
-    for roi in filtered_ROIs:
-        crop_area = image.crop(roi)
-        masked_image.paste(crop_area, roi)
+    #for roi in filtered_ROIs:
+    #    crop_area = image.crop(roi)
+    #    masked_image.paste(crop_area, roi)
 
     # Save or show the resulting image
-    masked_image.show()
-    masked_image.save("high_quality_ROIs.tiff")
+    #masked_image.show()
+    #masked_image.save("high_quality_ROIs.tiff")
 
     #Filter out top 3 ROIs
     top_ROIs = filtered_ROIs[np.argsort(filtered_roi_qualities)[::-1][:3]]
 
     # Create a mask image with a black background (or any other color)
-    masked_image = Image.new('I', image.size, 0)
+    #masked_image = Image.new('I', image.size, 0)
 
     # Copy only top 3 ROIs to the masked image
-    for roi in top_ROIs:
-        crop_area = image.crop(roi)
-        masked_image.paste(crop_area, roi)
+    #for roi in top_ROIs:
+    #    crop_area = image.crop(roi)
+    #    masked_image.paste(crop_area, roi)
 
     # Save or show the resulting image
-    masked_image.show()
+    #masked_image.show()
     # Save the image
-    masked_image.save("top_3_ROIs.tiff")
+    #masked_image.save("top_3_ROIs.tiff")
+
+    return top_ROIs
+
+from PIL import Image
+
+def save_rois_image(image_path, rois, output_path):
+    """
+    Crops regions of interest from an image and saves each as a new TIFF file.
+
+    Args:
+    image_path (str): Path to the original image.
+    rois (list of tuples): A list of tuples, each containing the coordinates (x, y, width, height) of a rectangle ROI.
+    output_path (str): Directory where the cropped images will be saved.
+    """
+    # Open the original image
+    image = Image.open(image_path)
+    
+    # Get the base name for the image without the path and extension
+    base_name = os.path.splitext(os.path.basename(image_path))[0]
+    
+    # Process each ROI
+    for i, (x, y, width, height) in enumerate(rois):
+        # Crop the image using the coordinates
+        cropped_image = image.crop((x, y, x + width, y + height))
+        
+        # Create a file name that includes the original image name and ROI coordinates
+        roi_file_name = f"{base_name}_roi_{i}_{x}_{y}_{width}_{height}.tif"
+        
+        # Create the full path to save the cropped image
+        full_path = os.path.join(output_path, roi_file_name)
+        
+        # Save the cropped image as a TIFF file
+        cropped_image.save(full_path)
+
+    print(f"All ROIs have been saved in {output_path}")
+
+
+    
+
+    
 
 
 

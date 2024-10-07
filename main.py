@@ -4,6 +4,7 @@ from tkinter import filedialog
 import tkinter as tk
 from Analysis.SOAC.preprocessing_image_selection import *
 from Analysis.SOAC.analytics_ridge_pipeline import analyze_data
+from Analysis.SOAC.soac_analysis import soac_api
 from Analysis.STORM.analytics_storm_pipeline import analyze_data_storm
 from Data_access import box_connection
 from Data_access.file_explorer import *
@@ -87,12 +88,28 @@ def main():
 
 
     elif user_choice == '3':
-        file_path = filedialog.askopenfilename(title="Select File for Processing", filetypes=[("Tiff Files", "*.tiff *.tif")])
-        if file_path:
+        folder_path = filedialog.askdirectory(title="Select Folder Path for SOAC Analysis")
+        parameter_file = filedialog.askopenfilename(title="Select Parameter File for SOAC Analysis")
+        executable_path = filedialog.askopenfilename(title="Select Executable Path for SOAC Analysis")
+
+        if folder_path:
             config_path = find_item(item_name='ridge_detector_param.json', is_folder=False)
-            preprocessing_image_selection(file_path, config_path, num_ROIs=16)
+            valid_folders = folders_for_soac(folder_path)
+            for folder in valid_folders:
+                # Find tif file in folder
+                tif_file = find_item(base_directory=folder, extension='tif')
+                ROIs = preprocessing_image_selection(tif_file, config_path, num_ROIs=16)
+                # Add a new folder when defining the output_folder name called ROIs
+                output_folder = os.path.join(folder, 'ROIs')
+                # Save rois images
+                save_rois_image(tif_file, ROIs, output_folder)
+                print(f"Data processed for: {folder}")
+
+                soac_api(output_folder, parameter_file, executable_path, folder)
         else:
             print("No file selected.")  
+
+        
 
 
     else:
