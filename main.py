@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 from tkinter import filedialog
 import tkinter as tk
 from Analysis.SOAC.preprocessing_image_selection import *
@@ -96,16 +97,32 @@ def main():
             config_path = find_item(item_name='ridge_detector_param.json', is_folder=False)
             valid_folders = folders_for_soac(folder_path)
             for folder in valid_folders:
-                # Find tif file in folder
-                tif_file = find_item(base_directory=folder, extension='tif')
-                ROIs = preprocessing_image_selection(tif_file, config_path, num_ROIs=16)
-                # Add a new folder when defining the output_folder name called ROIs
-                output_folder = os.path.join(folder, 'ROIs')
-                # Save rois images
-                save_rois_image(tif_file, ROIs, output_folder)
-                print(f"Data processed for: {folder}")
+                # Find tif files in folder
+                tif_files = find_items(base_directory=folder, extension='tif')
 
-                soac_api(output_folder, parameter_file, executable_path, folder)
+                for tif_file in tif_files:
+                    # Extract the base name without the extension to use as a folder name
+                    base_name = os.path.splitext(os.path.basename(tif_file))[0]
+                    new_folder_path = os.path.join(folder, base_name)
+
+                    # Create a folder named after the file
+                    if not os.path.exists(new_folder_path):
+                        os.makedirs(new_folder_path)
+
+                    # Move the TIFF file into the newly created folder
+                    new_file_path = os.path.join(new_folder_path, os.path.basename(tif_file))
+                    shutil.move(tif_file, new_file_path)
+                    print(f"Moved {tif_file} to {new_file_path}")
+
+                    # Preprocess the image and select ROIs
+                    ROIs = preprocessing_image_selection(new_file_path, config_path, num_ROIs=16)
+                    # Add a new folder when defining the output_folder name called ROIs
+                    output_folder = os.path.join(new_folder_path, 'ROIs')
+                    # Save rois images
+                    save_rois_image(new_file_path, ROIs, output_folder)
+                    print(f"Data processed for: {folder}")
+
+                    soac_api(output_folder, parameter_file, executable_path, folder)
         else:
             print("No file selected.")  
 

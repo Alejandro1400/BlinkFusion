@@ -192,3 +192,50 @@ def find_item(base_directory=None, item_name=None, is_folder=True, extension=Non
         raise ValueError("Multiple files found. Specify an item name or use a different search criteria.")
     return matches[0]
 
+def find_items(base_directory=None, item_name=None, is_folder=True, extension=None):
+    """
+    Search for a folder or file within the directory tree starting from the base directory.
+    
+    Args:
+    base_directory (str): The starting directory for the search.
+    item_name (str, optional): The name of the folder or file to find. If None, the first match will be returned.
+    is_folder (bool): Flag indicating whether to search for a folder (True) or a file (False).
+    extension (str, optional): The extension of the file to find. If specified, the search will target files with this extension.
+
+    Returns:
+    str: The full path to the folder or file if found.
+
+    Raises:
+    FileNotFoundError: If no folder or file matches the search criteria.
+    ValueError: If more than one file matches the search criteria and item_name is not specified.
+    """
+    if base_directory is None:
+        base_directory = os.getcwd()  # Use current working directory if no base is provided
+
+    matches = []
+    for root, dirs, files in os.walk(base_directory):
+        # Check directories only if is_folder is True
+        if is_folder:
+            if item_name:
+                if item_name in dirs:
+                    matches.append(os.path.join(root, item_name))
+            else:
+                # If no item name specified, add first directory found to matches
+                if dirs:
+                    matches.append(os.path.join(root, dirs[0]))
+            continue
+
+        # Check files only if is_folder is False
+        if not is_folder:
+            # Filter files by extension if one is provided
+            if extension:
+                files = [f for f in files if f.endswith(f".{extension}")]
+            if item_name:
+                files = [f for f in files if f.split('.')[0] == item_name]
+
+            matches.extend(os.path.join(root, f) for f in files)
+
+    # Handle the cases of no matches or multiple matches
+    if not matches:
+        raise FileNotFoundError("No matching folder or file found within the project structure.")
+    return matches
