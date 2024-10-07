@@ -19,20 +19,41 @@ def load_credentials(file_path):
         return None
 
 
-def box_signin(auth_file_path=None):
-    # Try to find the auth_info file in the current directory
-    credentials = load_credentials(auth_file_path)
-    if credentials is None or not all(key in credentials for key in ['DEVELOPER_TOKEN']):
-        print(f"Invalid credentials or '{auth_file_path}' file not found.")
-        return None
+def box_signin(auth_file_path=None, developer_token=None):
+    """
+    Authenticate with Box using an authentication file or directly with a developer token.
+
+    Args:
+    auth_file_path (str, optional): Path to the authentication file containing the developer token.
+    developer_token (str, optional): Directly provided Box developer token.
+
+    Returns:
+    tuple: (Box client object, User login) if successful, (None, None) otherwise.
+    """
+    # If auth_file_path is provided, try to load credentials from it
+    if auth_file_path:
+        credentials = load_credentials(auth_file_path)
+        if credentials is None or 'DEVELOPER_TOKEN' not in credentials:
+            print(f"Invalid credentials or '{auth_file_path}' file not found.")
+            return None, None
+        token = credentials['DEVELOPER_TOKEN']
+    elif developer_token:
+        # Use the provided developer token if no file path is provided
+        token = developer_token
+    else:
+        print("No valid authentication details provided.")
+        return None, None
+
+    # Attempt to create a Box client using the OAuth2 token
     try:
-        oauth2 = OAuth2(None, None, access_token=credentials['DEVELOPER_TOKEN'])
+        oauth2 = OAuth2(None, None, access_token=token)
         box_client = Client(oauth2)
-        print('Connected to Box as:', box_client.user().get().login)
-        return box_client
+        user_login = box_client.user().get().login
+        print('Connected to Box as:', user_login)
+        return box_client, user_login
     except Exception as error:
         print("Box authentication failed:", error)
-        return None
+        return None, None
 
 
 def database_stats(box_client, root_dir='Filament Data'):
