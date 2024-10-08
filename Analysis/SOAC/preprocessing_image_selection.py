@@ -121,7 +121,7 @@ def ridges_statistics(ridges, junctions):
     ridge_junction_ratio = num_ridges / num_junctions if num_junctions > 0 else 0
     
     # Calculate total length of each ridge and average length
-    total_length = 0
+    lengths = []
     average_widths = []
     mean_intensities = []
     for ridge in ridges:
@@ -130,18 +130,22 @@ def ridges_statistics(ridges, junctions):
         # Calculate the length of the ridge using the Euclidean distance between points
         length = sum(np.sqrt((x_coords[i] - x_coords[i - 1]) ** 2 + (y_coords[i] - y_coords[i - 1]) ** 2) 
                      for i in range(1, len(x_coords)))
-        total_length += length
+        lengths.append(length)
 
         mean_intensity = np.mean(ridge.intensity)
         mean_intensities.append(mean_intensity)
+
+        avg_width = np.mean(ridge.width_l + ridge.width_r)
+        average_widths.append(avg_width)
     
     # Calculate mean length and coefficient of variation
-    mean_length = total_length / num_ridges if num_ridges > 0 else 0
-    cv_length = np.std(average_widths) / np.mean(average_widths) if np.mean(average_widths) != 0 else 0
+    mean_length = np.mean(lengths)
+    cv_length = np.std(lengths) / np.mean(lengths) if np.mean(lengths) != 0 else 0
     mean_intensity = np.mean(mean_intensities)
+    cv_width = np.std(average_widths) / np.mean(average_widths) if np.mean(average_widths) != 0 else 0
     
     # Normalize the values using Min-Max normalization (0-1 scaling)
-    metrics = np.array([num_ridges, ridge_junction_ratio, mean_length, cv_length, mean_intensity])
+    metrics = np.array([num_ridges, ridge_junction_ratio, mean_length, cv_length, cv_width, mean_intensity])
     #metric_names = ["Number of Ridges", "Ridge/Junction Ratio", "Mean Length", "CV Length", "Mean Intensity", "CV Width"]
 
     # Printing metrics with names
@@ -197,8 +201,8 @@ def preprocessing_image_selection(image_path, config_file, scaling_method='min_m
     all_metrics = np.array(metrics_results)
     
     # Names and initial weights for the metrics
-    metric_names = ["Number of Ridges", "Ridge/Junction Ratio", "Mean Length", "CV Length", "Mean Intensity"]
-    weights = np.array([35, 35, 10, 10, 10]) / 100.0
+    metric_names = ["Number of Ridges", "Ridge/Junction Ratio", "Mean Length", "CV Length", "CV Width", "Mean Intensity"]
+    weights = np.array([35, 35, 10, 10, 5, 5]) / 100.0
 
     min_vals = np.min(all_metrics, axis=0)
     max_vals = np.max(all_metrics, axis=0)
@@ -238,7 +242,7 @@ def preprocessing_image_selection(image_path, config_file, scaling_method='min_m
 
 
     # Set new weights for the metrics
-    weights = np.array([35, 20, 25, 10, 10]) / 100.0
+    weights = np.array([35, 20, 25, 10, 5, 5]) / 100.0
 
     # Standard scale the metrics
     scaled_metrics = (filtered_metrics - np.mean(filtered_metrics, axis=0)) / np.std(filtered_metrics, axis=0)
@@ -316,7 +320,11 @@ def save_rois_image(image_path, rois, output_path):
         cropped_image = image.crop((x, y, x + width, y + height))
         
         # Create a file name that includes the original image name and ROI coordinates
-        roi_file_name = f"{base_name}_roi_{i}_{x}_{y}_{width}_{height}.tif"
+        roi_file_name = f"{base_name}_roi_{x}_{y}_{width}_{height}.tif"
+
+        # Create folder for output if it does not exist
+        if not os.path.exists(output_path):
+            os.makedirs(output_path)
         
         # Create the full path to save the cropped image
         full_path = os.path.join(output_path, roi_file_name)

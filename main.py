@@ -123,7 +123,7 @@ def main():
                     save_rois_image(new_file_path, ROIs, output_folder)
                     print(f"Data processed for: {folder}")
 
-                    soac_api(output_folder, parameter_file, executable_path, folder)
+                    soac_api(output_folder, parameter_file, executable_path, new_folder_path)
         else:
             print("No file selected.")  
 

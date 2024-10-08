@@ -80,12 +80,12 @@ def soac_api(image_path, parameter_file, executable_path, output_dir):
     """
     Run the SOAC analysis on the given input image and return the results as DataFrames.
     """
+    roi_path = os.path.join(output_dir, 'ROIs')
     # Run the SOAC analysis
-    run_soax_analysis(image_path, parameter_file, executable_path, output_dir)
+    run_soax_analysis(image_path, parameter_file, executable_path, roi_path)
     
     # Obtain the results from the output directory
-    snakes_folder = os.path.join(output_dir, 'ROIs')
-    snakes_df, junctions_df = obtain_df_result_snakes(snakes_folder)
+    snakes_df, junctions_df = obtain_df_result_snakes(image_path)
     
     # Save as csv files
     snakes_df.to_csv('snakes.csv', index=False)
