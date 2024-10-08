@@ -18,7 +18,7 @@
 
     "further_options": {
         "Correct_position": true,
-        "Estimate_width": true,
+        "Estimate_width": false,
         "doExtendLine": true,
         "Show_junction_points": true,
         "Show_IDs": false,

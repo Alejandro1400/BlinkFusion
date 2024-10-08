@@ -132,9 +132,6 @@ def ridges_statistics(ridges, junctions):
                      for i in range(1, len(x_coords)))
         total_length += length
 
-        avg_width = np.mean(ridge.width_l + ridge.width_r)
-        average_widths.append(avg_width)
-
         mean_intensity = np.mean(ridge.intensity)
         mean_intensities.append(mean_intensity)
     
@@ -142,10 +139,9 @@ def ridges_statistics(ridges, junctions):
     mean_length = total_length / num_ridges if num_ridges > 0 else 0
     cv_length = np.std(average_widths) / np.mean(average_widths) if np.mean(average_widths) != 0 else 0
     mean_intensity = np.mean(mean_intensities)
-    cv_width = np.std(average_widths) / np.mean(average_widths) if np.mean(average_widths) != 0 else 0
     
     # Normalize the values using Min-Max normalization (0-1 scaling)
-    metrics = np.array([num_ridges, ridge_junction_ratio, mean_length, cv_length, mean_intensity, cv_width])
+    metrics = np.array([num_ridges, ridge_junction_ratio, mean_length, cv_length, mean_intensity])
     #metric_names = ["Number of Ridges", "Ridge/Junction Ratio", "Mean Length", "CV Length", "Mean Intensity", "CV Width"]
 
     # Printing metrics with names
@@ -201,8 +197,8 @@ def preprocessing_image_selection(image_path, config_file, scaling_method='min_m
     all_metrics = np.array(metrics_results)
     
     # Names and initial weights for the metrics
-    metric_names = ["Number of Ridges", "Ridge/Junction Ratio", "Mean Length", "CV Length", "Mean Intensity", "CV Width"]
-    weights = np.array([35, 35, 10, 10, 5, 5]) / 100.0
+    metric_names = ["Number of Ridges", "Ridge/Junction Ratio", "Mean Length", "CV Length", "Mean Intensity"]
+    weights = np.array([35, 35, 10, 10, 10]) / 100.0
 
     min_vals = np.min(all_metrics, axis=0)
     max_vals = np.max(all_metrics, axis=0)
@@ -242,7 +238,7 @@ def preprocessing_image_selection(image_path, config_file, scaling_method='min_m
 
 
     # Set new weights for the metrics
-    weights = np.array([35, 20, 25, 10, 5, 5]) / 100.0
+    weights = np.array([35, 20, 25, 10, 10]) / 100.0
 
     # Standard scale the metrics
     scaled_metrics = (filtered_metrics - np.mean(filtered_metrics, axis=0)) / np.std(filtered_metrics, axis=0)
