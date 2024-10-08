@@ -90,15 +90,16 @@ def main():
 
     elif user_choice == '3':
         folder_path = filedialog.askdirectory(title="Select Folder Path for SOAC Analysis")
-        parameter_file = filedialog.askopenfilename(title="Select Parameter File for SOAC Analysis")
-        executable_path = filedialog.askopenfilename(title="Select Executable Path for SOAC Analysis")
+        
+        executable_path = find_item(item_name='batch_soax_v3.7.0.exe', is_folder=False)
 
         if folder_path:
+            parameter_file = find_item(item_name='batch_parameters.txt', is_folder=False)
             config_path = find_item(item_name='ridge_detector_param.json', is_folder=False)
             valid_folders = folders_for_soac(folder_path)
             for folder in valid_folders:
                 # Find tif files in folder
-                tif_files = find_items(base_directory=folder, extension='tif')
+                tif_files = find_tif_files_soac(folder)
 
                 for tif_file in tif_files:
                     # Extract the base name without the extension to use as a folder name
