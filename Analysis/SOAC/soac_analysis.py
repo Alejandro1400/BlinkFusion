@@ -67,6 +67,9 @@ def obtain_df_result_snakes(snakes_folder):
                         snake.insert(0, base_filename)
 
                         snake_data.append(snake)
+
+            # Delete txt file after processing
+            os.remove(file_path)
     
     snakes_df = pd.DataFrame(snake_data, columns=['File', 'Snake', 'Point', 'x', 'y', 'z', 'fg_int', 'bg_int'])
     junctions_df = pd.DataFrame(junctions_data, columns=['File', 'x', 'y', 'z'])
@@ -87,9 +90,8 @@ def soac_api(image_path, parameter_file, executable_path, output_dir):
     # Obtain the results from the output directory
     snakes_df, junctions_df = obtain_df_result_snakes(image_path)
     
-    # Save as csv files
-    snakes_df.to_csv('snakes.csv', index=False)
-    junctions_df.to_csv('junctions.csv', index=False)
-
+    # Save as csv files in the output directory
+    snakes_df.to_csv(os.path.join(output_dir, 'snakes.csv'), index=False)
+    junctions_df.to_csv(os.path.join(output_dir, 'junctions.csv'), index=False)
 
 
