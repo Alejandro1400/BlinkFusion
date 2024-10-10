@@ -1,6 +1,6 @@
 # Ignore directory for data
 Data/
-Data Storm/
+Data_storm/
 
 # Python cache files
 __pycache__/

@@ -179,7 +179,7 @@ def preprocessing_image_selection(image_path, config_file, scaling_method='min_m
     # Prepare the image
     image = prepare_image(image_path)
 
-    #image.show()
+    image.show()
     # Save
     #image.save("original_image.tiff")
 
@@ -229,15 +229,15 @@ def preprocessing_image_selection(image_path, config_file, scaling_method='min_m
         print("\n")
 
     # Create a mask image with a black background (or any other color)
-    #masked_image = Image.new('I', image.size, 0)
+    masked_image = Image.new('I', image.size, 0)
 
     # Copy only high-quality ROIs to the masked image
-    #for roi in filtered_ROIs:
-    #    crop_area = image.crop(roi)
-    #    masked_image.paste(crop_area, roi)
+    for roi in filtered_ROIs:
+        crop_area = image.crop(roi)
+        masked_image.paste(crop_area, roi)
 
     # Save or show the resulting image
-    #masked_image.show()
+    masked_image.show()
     #masked_image.save("high_quality_ROIs_min_max.tiff")
 
 
@@ -268,30 +268,30 @@ def preprocessing_image_selection(image_path, config_file, scaling_method='min_m
         print("\n")
 
     # Create a mask image with a black background (or any other color)
-    #masked_image = Image.new('I', image.size, 0)
+    masked_image = Image.new('I', image.size, 0)
 
     # Copy only high-quality ROIs to the masked image
-    #for roi in filtered_ROIs:
-    #    crop_area = image.crop(roi)
-    #    masked_image.paste(crop_area, roi)
+    for roi in filtered_ROIs:
+        crop_area = image.crop(roi)
+        masked_image.paste(crop_area, roi)
 
     # Save or show the resulting image
-    #masked_image.show()
+    masked_image.show()
     #masked_image.save("high_quality_ROIs.tiff")
 
     #Filter out top 3 ROIs
     top_ROIs = filtered_ROIs[np.argsort(filtered_roi_qualities)[::-1][:3]]
 
     # Create a mask image with a black background (or any other color)
-    #masked_image = Image.new('I', image.size, 0)
+    masked_image = Image.new('I', image.size, 0)
 
     # Copy only top 3 ROIs to the masked image
-    #for roi in top_ROIs:
-    #    crop_area = image.crop(roi)
-    #    masked_image.paste(crop_area, roi)
+    for roi in top_ROIs:
+        crop_area = image.crop(roi)
+        masked_image.paste(crop_area, roi)
 
     # Save or show the resulting image
-    #masked_image.show()
+    masked_image.show()
     # Save the image
     #masked_image.save("top_3_ROIs.tiff")
 
