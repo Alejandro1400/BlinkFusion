@@ -45,10 +45,6 @@ def main():
 
 
 
-
-
-
-
     elif user_choice == '2':
 
         print("\nFile Explorer selected.")

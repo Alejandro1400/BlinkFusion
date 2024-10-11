@@ -1,27 +1,34 @@
 import numpy as np
 import pandas as pd
-
+from scipy.spatial import KDTree
+import time
 
 def analyze_data_storm(file_path):
-
     # Load CSV file into DataFrame
     df = pd.read_csv(file_path)
-
-    # Print the dataframe was loaded
     print("Data loaded.")
+
+    # Start the timer
+    start_time = time.time()
     
-    # Process the DataFrame to merge localizations
-    molecules, id_to_molecule = merge_localizations(df)
+    # Process the DataFrame to merge localizations using a KD-tree
+    id_to_molecule, time_dict = merge_localizations(df, start_time)
 
     # Create a new DataFrame with the molecules
     df['molecule_id'] = df['id'].map(id_to_molecule)
-    
 
+    # Save the processed data to a new CSV file
+    output_file = file_path.replace('.csv', '_processed.csv')
+    df.to_csv(output_file, index=False)
     print("Data processing complete and saved.")
-    #return processed_df
 
-def merge_localizations(df):
-    
+    # Save the timing dictionary as a CSV file
+    time_df = pd.DataFrame(list(time_dict.items()), columns=['Frame Range', 'Elapsed Time (s)'])
+    time_output_file = file_path.replace('.csv', '_timing.csv')
+    time_df.to_csv(time_output_file, index=False)
+    print(f"Timing data saved to {time_output_file}.")
+
+def merge_localizations(df, start_time):
     # Add id column if it doesn't exist
     if 'id' not in df.columns:
         df['id'] = range(len(df))
@@ -29,78 +36,99 @@ def merge_localizations(df):
     # Initialize molecule ID column
     df['molecule_id'] = np.nan
 
-    # Create a molecules dictionary to store the merged localizations
-    molecules = {}
+    # Create a molecules list to store the merged localizations
+    molecules = []
     id_to_molecule = {}
+
+    # Dictionary to store elapsed time for each frame range
+    time_dict = {}
+
+    # Store the coordinates and uncertainties for all localizations
+    coords = df[['x [nm]', 'y [nm]']].values
+    uncertainties = df['uncertainty_xy [nm]'].values
+
+    # Create a KD-tree for storing and querying molecule positions
+    kd_tree = None  # Initially no molecules are present
     actual_frame = 0
+    last_frame = 0
     new_molecules = 0
     assigned_molecules = 0
 
     # Iterate through each row
-    for index, row in df.iterrows():
-        loc_id = row['id']
-        loc_frame = row['frame']
-        loc_x = row['x [nm]']
-        loc_y = row['y [nm]']
-        loc_uncertainty = row['uncertainty_xy [nm]']
+    for index, (loc_id, loc_frame, loc_x, loc_y, loc_uncertainty) in df[['id', 'frame', 'x [nm]', 'y [nm]', 'uncertainty_xy [nm]']].iterrows():
+        loc_coord = np.array([loc_x, loc_y])
 
-        # Check if the frame has changed and say how many new molecules were found in the last frame as well as how many where assigned to a previous one
-        if loc_frame != actual_frame:
+        # Check if the frame has changed and if it is mod 500
+        if loc_frame != actual_frame and loc_frame % 500 == 0:
             if actual_frame != 0:
-                print(f"Frame {loc_frame} - New: {new_molecules} - Assigned: {assigned_molecules}")
+                elapsed_time = time.time() - start_time
+                frame_range = f"{last_frame} to {actual_frame}"
+                print(f"Frame {frame_range} - New: {new_molecules} - Assigned: {assigned_molecules} - Elapsed time: {elapsed_time:.2f} seconds")
+                time_dict[frame_range] = elapsed_time
+            last_frame = actual_frame
             actual_frame = loc_frame
             new_molecules = 0
             assigned_molecules = 0
 
-        mol_id = find_closest_molecule(loc_x, loc_y, molecules, loc_uncertainty)
+        # KD-tree querying and molecule assignment logic
+        if kd_tree and len(molecules) > 0:
+            dist, nearest_index = kd_tree.query(loc_coord, distance_upper_bound=loc_uncertainty)
+            if dist < loc_uncertainty and dist < molecules[nearest_index]['uncertainty']:
+                assigned_molecule = nearest_index
+                molecules[assigned_molecule]['ids'].append(loc_id)
+                molecules[assigned_molecule]['localizations'].append(loc_coord)
+                molecules[assigned_molecule]['uncertainties'].append(loc_uncertainty)
 
-        if mol_id:
-            assigned_molecules += 1
-            # Update existing molecule
-            mol_data = molecules[mol_id]
-            mol_data['ids'].append(loc_id)
-            mol_data['localizations'].append({'x': loc_x, 'y': loc_y, 'uncertainty': loc_uncertainty})
+                # Update molecule properties (average position)
+                localizations = np.array(molecules[assigned_molecule]['localizations'])
+                uncertainties = np.array(molecules[assigned_molecule]['uncertainties'])
 
-            # Recalculate the molecule properties
-            new_x = np.mean([loc['x'] for loc in mol_data['localizations']])
-            new_y = np.mean([loc['y'] for loc in mol_data['localizations']])
-            new_uncertainty = max(loc['uncertainty'] for loc in mol_data['localizations'])
+                # Calculate the weighted average of the localizations
+                weights = 1 / uncertainties**2
+                new_x = np.average(localizations[:, 0], weights=weights)
+                new_y = np.average(localizations[:, 1], weights=weights)
+                new_uncertainty = np.sqrt(1 / weights.sum())
 
-            # Update molecule dictionary
-            mol_data['x'] = new_x
-            mol_data['y'] = new_y
-            mol_data['uncertainty'] = new_uncertainty
+                molecules[assigned_molecule]['x'] = new_x
+                molecules[assigned_molecule]['y'] = new_y
+                molecules[assigned_molecule]['uncertainty'] = new_uncertainty
+
+                id_to_molecule[loc_id] = assigned_molecule
+                df.at[index, 'molecule_id'] = assigned_molecule
+                assigned_molecules += 1
+            else:
+                # Create a new molecule if no suitable match is found
+                new_molecule_id = len(molecules)
+                molecules.append({
+                    'x': loc_x, 'y': loc_y, 'uncertainty': loc_uncertainty,
+                    'ids': [loc_id],
+                    'localizations': [loc_coord],
+                    'uncertainties': [loc_uncertainty]
+                })
+                id_to_molecule[loc_id] = new_molecule_id
+                df.at[index, 'molecule_id'] = new_molecule_id
+                new_molecules += 1
+                kd_tree = KDTree([mol['localizations'][0] for mol in molecules])
         else:
-            new_molecules += 1
-            mol_id = len(molecules)
-            # Create new molecule
-            molecules[len(molecules)] = {
+            # If there are no molecules yet, add the first molecule directly
+            molecules.append({
                 'x': loc_x, 'y': loc_y, 'uncertainty': loc_uncertainty,
                 'ids': [loc_id],
-                'localizations': [{'x': loc_x, 'y': loc_y, 'uncertainty': loc_uncertainty}]
-            }
+                'localizations': [loc_coord],
+                'uncertainties': [loc_uncertainty]
+            })
+            id_to_molecule[loc_id] = len(molecules) - 1
+            df.at[index, 'molecule_id'] = len(molecules) - 1
+            new_molecules += 1
+            kd_tree = KDTree([mol['localizations'][0] for mol in molecules])
 
-        # Assign molecule ID directly to the DataFrame
-        df.at[index, 'molecule_id'] = mol_id  
-            
-            
-    # Print the number of molecules found
-    print(f"Found {len(molecules)} molecules.")
+    # Print information for the last frame range
+    elapsed_time = time.time() - start_time
+    frame_range = f"{last_frame} to {actual_frame}"
+    print(f"Frame {frame_range} - New: {new_molecules} - Assigned: {assigned_molecules} - Elapsed time: {elapsed_time:.2f} seconds")
+    time_dict[frame_range] = elapsed_time
 
-    return molecules, id_to_molecule
+    # Print the total number of molecules found
+    print(f"Found {len(molecules)} molecules. Total time: {elapsed_time:.2f} seconds")
 
-
-
-def find_closest_molecule(x,y, molecules, threshold):
-    # It finds the closest molecule to a given point (x,y) within a given threshold
-    closest_molecule = None
-    min_distance = threshold
-    for mol_id, mol_data in molecules.items():
-        distance = ((x - mol_data['x'])**2 + (y - mol_data['y'])**2)**0.5
-        # Here I should still try to change the way it is decided. Especially because the uncertainty is biased by number of frame 
-        if distance < min_distance and distance <= mol_data['uncertainty']:
-            min_distance = distance
-            closest_molecule = mol_id
-
-    return closest_molecule
-        
+    return id_to_molecule, time_dict
