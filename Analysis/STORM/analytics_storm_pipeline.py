@@ -33,6 +33,10 @@ def merge_localizations(df, start_time):
     if 'id' not in df.columns:
         df['id'] = range(len(df))
 
+    # If uncertainty_xy column is uncertainty [nm], rename it
+    if 'uncertainty [nm]' in df.columns:
+        df.rename(columns={'uncertainty [nm]': 'uncertainty_xy [nm]'}, inplace=True)
+
     # Initialize molecule ID column
     df['molecule_id'] = np.nan
 
