@@ -238,9 +238,13 @@ def normalize_column_names(df, file_type):
     return df
 
 
-def process_file(file_path, file_type):
+def process_tracks(df, file_type):
     """ Process the entire file and merge tracking events. """
-    df = load_data(file_path)
+
+    # Eliminate rows where all values are NaN or String
+    condition = df.applymap(lambda x: isinstance(x, str) or pd.isna(x))
+    all_non_numeric = condition.all(axis=1)
+    df = df[~all_non_numeric]
 
     # Normalize column names
     raw_localizations = normalize_column_names(df, file_type)
@@ -252,7 +256,7 @@ def process_file(file_path, file_type):
     localizations = extract_localizations_data(raw_localizations)
 
     # Merge non-tracking events
-    tracking_events, localizations = merge_non_tracking_events(localizations, tracking_events)
+    #tracking_events, localizations = merge_non_tracking_events(localizations, tracking_events)
 
     # Merge molecules
     molecules = merge_molecules(tracking_events)
@@ -267,9 +271,9 @@ def process_file(file_path, file_type):
     return localizations
 
 # Usage of the function. Use file dialog
-file_path = tk.filedialog.askopenfilename()
-localizations = process_file(file_path, 'trackmate')
+#file_path = tk.filedialog.askopenfilename()
+#localizations = process_file(file_path, 'trackmate')
 # Save as a CSV file
-localizations.to_csv(file_path.replace('.csv', '_processed.csv'), index=False)
-print(localizations.head())
+#localizations.to_csv(file_path.replace('.csv', '_processed.csv'), index=False)
+#print(localizations.head())
 

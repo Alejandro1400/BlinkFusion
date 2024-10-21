@@ -250,7 +250,8 @@ def find_items(base_directory=None, item="Data", is_folder=True, check_multiple=
 
     raise FileNotFoundError(f"No matching {item} found within the specified directory.")
 
-def organize_file_into_folder(file_name):
+
+def organize_file_into_folder(file_name, files=None):
     """
     Extracts the base name from a file, creates a folder named after the file without its extension,
     and moves the file into the newly created folder.
@@ -266,10 +267,16 @@ def organize_file_into_folder(file_name):
     if not os.path.exists(new_folder_path):
         os.makedirs(new_folder_path)
 
-    # Move the file into the newly created folder
-    new_file_path = os.path.join(new_folder_path, os.path.basename(file_name))
-    shutil.move(file_name, new_file_path)
-    print(f"Moved {file_name} to {new_file_path}")
+    if files == None:
+        # Move the file into the newly created folder
+        new_file_path = os.path.join(new_folder_path, os.path.basename(file_name))
+        shutil.move(file_name, new_file_path)
+        print(f"Moved {file_name} to {new_file_path}")
+    else:
+        for file in files:
+            new_file_path = os.path.join(new_folder_path, os.path.basename(file))
+            shutil.move(file, new_file_path)
+            print(f"Moved {file} to {new_file_path}")
 
     return new_file_path
 

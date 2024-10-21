@@ -8,6 +8,7 @@ from Analysis.SOAC.preprocessing_image_selection import *
 from Analysis.SOAC.analytics_ridge_filaments import analyze_data
 from Analysis.SOAC.soac_api import soac_api
 from Analysis.STORM.analytics_storm_pipeline import analyze_data_storm
+from Analysis.STORM.molecule_merging import process_tracks
 from Data_access import box_connection
 from Data_access.file_explorer import *
 
@@ -22,6 +23,8 @@ def main():
     print("1: SOAC Biopolymerous Filamentous Network Analysis")
     print("2: STORM Microscopy Data Analysis")
     user_choice = input("Type '1', '2': ")
+
+
 
     if user_choice == '1':
         folder_path = filedialog.askdirectory(title="Select Folder for SOAC Analysis")
@@ -68,59 +71,37 @@ def main():
 
 
     elif user_choice == '2':
-        folder_path = filedialog.askdirectory(title="Select Folder for SOAC Processing")
+        folder_path = filedialog.askdirectory(title="Select Folder for Blinking Statistics TrackMate")
         if folder_path:
-            valid_folders = [f for f in os.listdir(folder_path) if check_data(
-                os.path.join(folder_path, f),
-                required_files={'.tif'},
-                exclude_files={'snakes.csv', 'junctions.csv'}
-            )]
+            valid_folders = find_valid_folders(
+                folder_path,
+                required_files={'.czi','trackmate.csv'},
+                exclude_files={'blink_stats.csv'}
+            )
+
+            print(valid_folders)
+
             for folder in valid_folders:
-                results, junctions, image = processing_data(folder)
-                processed = analyze_data(results, junctions, image)  
-                save_processed_data(processed, folder_path, folder) 
-                print(f"Data processed for: {folder}")
-        else:
-            print("No folder selected.")
+                
+                czi_files = find_items(base_directory=folder, item='.czi', is_folder=False, check_multiple=True, search_by_extension=True)
 
+                for czi_file in czi_files:
+                    # Obtain file name without directory and extension
+                    czi_filename = os.path.basename(czi_file).split(".c")[0]
+                    trackmate_file = find_items(base_directory=folder, item=f'{czi_filename}_trackmate.csv', is_folder=False, check_multiple=False, search_by_extension=False)
 
+                    # Add both files to a list
+                    tm_files = [czi_file, trackmate_file]
 
+                    if len(czi_files) > 1:
+                        tm_file = organize_file_into_folder(file_name = czi_file, files = tm_files)
 
-            
-        folder_path = filedialog.askdirectory(title="Select Folder for Processing")
-        if folder_path:
-            valid_folders = [f for f in os.listdir(folder_path) if check_data(
-                os.path.join(folder_path, f),
-                required_files={'Results.csv', 'Junctions.csv', '.tif'},
-                exclude_files={'Processed.csv'}
-            )]
-            for folder in valid_folders:
-                results, junctions, image = processing_data(folder)
-                processed = analyze_data(results, junctions, image)  
-                save_processed_data(processed, folder_path, folder) 
-                print(f"Data processed for: {folder}")
-        else:
-            print("No folder selected.")
-    elif user_choice == '2':
-        folder_path = filedialog.askdirectory(title="Select Folder for Dashboard")
-        if folder_path:
-            #valid_folders = folders_for_dashboard(folder_path)
-            for folder in valid_folders:
-                processed = dashboard_data(folder)
-                print(f"Dashboard data ready for: {folder}")
-        else:
-            print("No folder selected.")
+                    folder = os.path.dirname(tm_file)
+                    df = pd.read_csv(tm_file)
 
-    elif user_choice == '3':
-        file_path = filedialog.askopenfilename(title="Select File for Processing", filetypes=[("CSV Files", "*.csv")])
-        if file_path:
-            processed_storm = analyze_data_storm(file_path)
-            print("Data processed.")
-        else:
-            print("No file selected.")
+                    localizations = process_tracks(df, 'trackmate')
 
-        
-
+                    save_csv_file(folder, localizations, f'{os.path.basename(tm_file).split(".c")[0]}_blink_stats.csv')
 
     else:
         print("Invalid option selected.")
