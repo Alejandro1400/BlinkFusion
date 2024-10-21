@@ -68,14 +68,6 @@ def check_data(folder_path, required_files, exclude_files=None, exclude_folders=
     excluded_found = False
     excluded_folder_found = False
 
-    # Check for excluded folders at the current directory level
-    if exclude_folders:
-        for folder in os.listdir(folder_path):
-            folder_full_path = os.path.join(folder_path, folder)
-            if os.path.isdir(folder_full_path) and folder in exclude_folders:
-                excluded_folder_found = True
-                break
-
     for file in os.listdir(folder_path):
         if os.path.isfile(os.path.join(folder_path, file)):
             for req in required_files:
@@ -83,6 +75,8 @@ def check_data(folder_path, required_files, exclude_files=None, exclude_folders=
                     found_files[req] = found_files.get(req, 0) + 1
             if exclude_files and any(file.endswith(exc) for exc in exclude_files):
                 excluded_found = True
+        if exclude_folders and os.path.isdir(os.path.join(folder_path, file)) and file in exclude_folders:
+            excluded_folder_found = True
 
     missing_files = required_files - found_files.keys()
     output = {'found_files': found_files}
@@ -116,8 +110,11 @@ def find_valid_folders(folder_path, required_files, exclude_files=None, exclude_
     # Recursively check sub-folders
     for subdir in os.listdir(folder_path):
         sub_path = os.path.join(folder_path, subdir)
+        # Skip excluded folders
+        if exclude_folders and subdir in exclude_folders:
+            continue
         if os.path.isdir(sub_path):
-            valid_folders.extend(find_valid_folders(sub_path, required_files, exclude_files))
+            valid_folders.extend(find_valid_folders(sub_path, required_files, exclude_files, exclude_folders))
 
     return valid_folders
 

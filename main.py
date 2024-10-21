@@ -33,7 +33,7 @@ def main():
             valid_folders = find_valid_folders(
                 folder_path,
                 required_files={'.tif'},
-                exclude_files={'snakes.csv', 'junctions.csv'},
+                exclude_files={'ridge_metrics.csv', 'soac_results.csv'},
                 exclude_folders={'ROIs'}
             )
 
