@@ -175,7 +175,7 @@ def detect_ridges(img, config):
         metrics = ridges_statistics(result, resultJunction)
         return metrics
 
-    except Exception as e:
+    except BaseException as e:
 
         return np.zeros(6)  
 
