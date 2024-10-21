@@ -1,4 +1,4 @@
-import numpy
+import numpy as np
 import pandas as pd
 import tkinter as tk
 from tkinter import filedialog
@@ -9,43 +9,72 @@ def load_data(file_path):
     """ Load data from a CSV file into a DataFrame. """
     return pd.read_csv(file_path)
 
-def merge_tracking_events(df):
-    """ Merge tracking events and calculate weighted positions and frame extents. """
-    # Calculate weighted positions
-    df['weighted_x'] = df['POSITION_X'] * df['QUALITY']
-    df['weighted_y'] = df['POSITION_Y'] * df['QUALITY']
-    df['weighted_z'] = df['POSITION_Z'] * df['QUALITY']
+def create_tracking_events_df(df, file_type):
+    """
+    Calculate weighted positions for tracking events based on the specified weight column.
     
-    # Group by TRACK_ID
+    Parameters:
+    - df (pd.DataFrame): DataFrame containing tracking data for localizations.
+    - file_type (str): Type of file which determines the weighting column ('thunderstorm' uses 'UNCERTAINTY [NM]', others use 'QUALITY').
+    
+    Returns:
+    - pd.DataFrame: Summarized DataFrame of tracking events for weighted coordinates and statistical information.
+    """
+    weight_column = 'UNCERTAINTY [NM]' if file_type == 'thunderstorm' else 'QUALITY'
+
+    if weight_column not in df.columns:
+        df[weight_column] = 1
+
+    df['weighted_x'] = df['X'] * df[weight_column]
+    df['weighted_y'] = df['Y'] * df[weight_column]
+    df['weighted_z'] = df['Z'] * df[weight_column] if 'Z' in df.columns else df[weight_column] 
+
     grouped = df.groupby('TRACK_ID')
     result = grouped.apply(lambda g: pd.Series({
-        'mean_x': g['weighted_x'].sum() / g['QUALITY'].sum(),
-        'mean_y': g['weighted_y'].sum() / g['QUALITY'].sum(),
-        'mean_z': g['weighted_z'].sum() / g['QUALITY'].sum(),
+        'mean_x': g['weighted_x'].sum() / g[weight_column].sum(),
+        'mean_y': g['weighted_y'].sum() / g[weight_column].sum(),
+        'mean_z': g['weighted_z'].sum() / g[weight_column].sum() if 'Z' in g.columns else 0,
         'min_frame': g['FRAME'].min(),
         'max_frame': g['FRAME'].max(),
         'gaps': list(set(range(g['FRAME'].min(), g['FRAME'].max() + 1)) - set(g['FRAME']))
     })).reset_index()
-    
+
+    # Remove the weighted columns
+    df.drop(columns=['weighted_x', 'weighted_y', 'weighted_z'], inplace=True)
+
     return result
 
 
-def prepare_localizations(df):
-    """ Prepare the localizations dataset with relevant columns. """
-    return df[['ID', 'TRACK_ID', 'POSITION_X', 'POSITION_Y', 'POSITION_Z', 'QUALITY', 'MEAN_INTENSITY_CH1', 'SNR_CH1', 'FRAME']]
+def extract_localizations_data(df):
+    """
+    Extract and prepare the localizations dataset with essential columns.
+    
+    Parameters:
+    - df (pd.DataFrame): DataFrame from which to extract localization data.
+    
+    Returns:
+    - pd.DataFrame: DataFrame with localization data.
+    """
+    if 'Z' not in df.columns:
+        df['Z'] = 0
+
+    return df[['ID', 'FRAME', 'TRACK_ID', 'X', 'Y', 'Z']]
 
 
-def calculate_xy_distance(track, loc):
-    """ Calculate the Euclidean distance in the XY plane between a track and a localization. """
-    return numpy.sqrt((track['mean_x'] - loc['POSITION_X'])**2 + (track['mean_y'] - loc['POSITION_Y'])**2)
-
-import numpy as np
-
-
-def calculate_distance(event1, event2):
-    return np.sqrt((event1['mean_x'] - event2['mean_x'])**2 + 
-                   (event1['mean_y'] - event2['mean_y'])**2 + 
-                   (event1['mean_z'] - event2['mean_z'])**2)
+def calculate_distance(track, localization):
+    """
+    Calculate the Euclidean distance in XYZ space between a track and a localization point.
+    
+    Parameters:
+    - track (pd.Series): Data for the track.
+    - localization (pd.Series): Data for the localization.
+    
+    Returns:
+    - float: The calculated distance.
+    """
+    return np.sqrt((track['mean_x'] - localization['X'])**2 + 
+                   (track['mean_y'] - localization['Y'])**2 + 
+                   (track['mean_z'] - localization['Z'])**2)
 
 
 def recursive_frame_check(track_index, frame, tracking_events, localizations, max_distance):
@@ -60,7 +89,7 @@ def recursive_frame_check(track_index, frame, tracking_events, localizations, ma
 
     # Find the closest localization in this specific frame
     for j, loc in frame_localizations.iterrows():
-        distance = calculate_xy_distance(track, loc)
+        distance = calculate_distance(track, loc)
         if distance <= max_distance and distance < min_distance:
             min_distance = distance
             selected_loc = j
@@ -84,7 +113,18 @@ def recursive_frame_check(track_index, frame, tracking_events, localizations, ma
 
 
 def merge_non_tracking_events(localizations, tracking_events, max_distance=0.1):
-    """ Identify and merge closest localizations and tracking events within a maximum distance, using recursion. """
+    """
+    Merge tracking events with localizations based on proximity and update tracking details recursively.
+    
+    Parameters:
+    - localizations (pd.DataFrame): DataFrame containing localization data.
+    - tracking_events (pd.DataFrame): DataFrame containing tracking event data.
+    - max_distance (float): Maximum distance to consider for merging events.
+    
+    Returns:
+    - pd.DataFrame: Updated tracking events.
+    - pd.DataFrame: Updated localizations.
+    """
     all_updates = []
 
     for i, track in tracking_events.iterrows():
@@ -111,7 +151,16 @@ def merge_non_tracking_events(localizations, tracking_events, max_distance=0.1):
 
                 
 def merge_molecules(tracking_events, max_distance=0.1):
-    """ Merge tracking events that are close to each other within a maximum distance. """
+    """
+    Cluster tracking events that are close to each other within a maximum distance.
+    
+    Parameters:
+    - tracking_events (pd.DataFrame): DataFrame containing tracking event data.
+    - max_distance (float): Maximum distance to consider for clustering.
+    
+    Returns:
+    - pd.DataFrame: DataFrame with updated molecule IDs for each tracking event.
+    """
     # Create a KD-tree for tracking events
     tree = tracking_events[['mean_x', 'mean_y']].values
     kd_tree = KDTree(tree)
@@ -152,30 +201,74 @@ def merge_molecules(tracking_events, max_distance=0.1):
 
     return tracking_events
 
-def assign_molecule_id(tracking_events, localizations):
-    """ Assign molecule ID to localizations based on tracking events. """
-    # Match tracking events id and track_id to assign molecule_id to localizations
-    updated_localizations = localizations.merge(tracking_events[['TRACK_ID', 'molecule_id']], 
-                                                left_on='TRACK_ID', 
-                                                right_on='TRACK_ID', 
-                                                how='left')
+def assign_molecule_ids(molecules, localizations):
+    """
+    Assign molecule IDs to localizations based on associated tracking events.
+    
+    Parameters:
+    - tracking_events (pd.DataFrame): DataFrame with tracking events including molecule IDs.
+    - localizations (pd.DataFrame): DataFrame of localizations to update with molecule IDs.
+    
+    Returns:
+    - pd.DataFrame: Updated localizations with molecule IDs.
+    """
 
-    return updated_localizations
+    return localizations.merge(molecules[['TRACK_ID', 'molecule_id']], on='TRACK_ID', how='left')
+
+        
+def normalize_column_names(df, file_type):
+    """
+    Normalize column names based on the file type and convert to uppercase.
+    
+    Parameters:
+    - df (pd.DataFrame): DataFrame whose columns are to be normalized.
+    - file_type (str): Type of file ('trackmate' or 'thunderstorm') to determine the column mapping.
+    
+    Returns:
+    - pd.DataFrame: DataFrame with normalized column names.
+    """
+    mappings = {
+        'trackmate': {'ID': 'id', 'FRAME': 'frame', 'POSITION_X': 'x', 'POSITION_Y': 'y'},
+        'thunderstorm': {'id': 'id', 'frame': 'frame', 'x [nm]': 'x', 'y [nm]': 'y'}
+    }
+    mapping = mappings.get(file_type.lower(), {})
+    df.rename(columns=mapping, inplace=True)
+    df.columns = df.columns.str.upper()
+
+    return df
 
 
-def process_file(file_path):
+def process_file(file_path, file_type):
     """ Process the entire file and merge tracking events. """
     df = load_data(file_path)
-    tracking_events = merge_tracking_events(df)
-    localizations = prepare_localizations(df)
+
+    # Normalize column names
+    raw_localizations = normalize_column_names(df, file_type)
+
+    # Create tracking events DataFrame
+    tracking_events = create_tracking_events_df(raw_localizations, file_type)
+
+    # Extract localization data
+    localizations = extract_localizations_data(raw_localizations)
+
+    # Merge non-tracking events
     tracking_events, localizations = merge_non_tracking_events(localizations, tracking_events)
-    tracking_events = merge_molecules(tracking_events)
-    localizations = assign_molecule_id(tracking_events, localizations)
+
+    # Merge molecules
+    molecules = merge_molecules(tracking_events)
+
+    # Assign molecule IDs to localizations
+    localizations = assign_molecule_ids(molecules, raw_localizations)
+
+    # Convert columns to uppercase
+    localizations.columns = localizations.columns.str.upper()
+
+
     return localizations
 
 # Usage of the function. Use file dialog
 file_path = tk.filedialog.askopenfilename()
-localizations = process_file(file_path)
+localizations = process_file(file_path, 'trackmate')
 # Save as a CSV file
 localizations.to_csv(file_path.replace('.csv', '_processed.csv'), index=False)
 print(localizations.head())

@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import pandas as pd
 from ridge_detection.lineDetector import LineDetector 
 from ridge_detection.params import Params, load_json
 from ridge_detection.helper import displayContours
@@ -155,31 +156,38 @@ def ridges_statistics(ridges, junctions):
 
 
 def detect_ridges(img, config):
-    # Calculate parameters from image
-    config = ridge_detection_params(img, config)
+    try:
+        # Calculate parameters from image
+        config = ridge_detection_params(img, config)
 
-    # Initialize the line detector
-    detect = LineDetector(params=config)
-    
-    # Perform line detection
-    result = detect.detectLines(img)
-    resultJunction = detect.junctions
+        # Initialize the line detector
+        detect = LineDetector(params=config)
+        
+        # Perform line detection
+        result = detect.detectLines(img)
+        resultJunction = detect.junctions
 
-    # Ridge statistics
-    metrics = ridges_statistics(result, resultJunction)
-    
-    # Return the detection results
-    return metrics
+        # If no ridges are found
+        if not result:
+            raise ValueError("No ridges detected.")
+
+        # Ridge statistics
+        metrics = ridges_statistics(result, resultJunction)
+        return metrics
+
+    except Exception as e:
+
+        return np.zeros(6)  
 
 
-def preprocessing_image_selection(image_path, config_file, scaling_method='min_max', num_ROIs=None, ROI_size=None):
+def preprocessing_image_selection(image_path, config_file, num_ROIs=None, ROI_size=None):
     # Load the configuration
     config = load_json(config_file)
 
     # Prepare the image
     image = prepare_image(image_path)
 
-    image.show()
+    #image.show()
     # Save
     #image.save("original_image.tiff")
 
@@ -202,6 +210,8 @@ def preprocessing_image_selection(image_path, config_file, scaling_method='min_m
     
     # Names and initial weights for the metrics
     metric_names = ["Number of Ridges", "Ridge/Junction Ratio", "Mean Length", "CV Length", "CV Width", "Mean Intensity"]
+    all_metrics_df = pd.DataFrame(all_metrics, columns=metric_names)
+    all_metrics_df['ROI'] = [tuple(roi) for roi in ROIs]  # Convert ROIs to tuple for DataFrame storage
     weights = np.array([35, 35, 10, 10, 5, 5]) / 100.0
 
     min_vals = np.min(all_metrics, axis=0)
@@ -237,7 +247,7 @@ def preprocessing_image_selection(image_path, config_file, scaling_method='min_m
         masked_image.paste(crop_area, roi)
 
     # Save or show the resulting image
-    masked_image.show()
+    #masked_image.show()
     #masked_image.save("high_quality_ROIs_min_max.tiff")
 
 
@@ -276,7 +286,7 @@ def preprocessing_image_selection(image_path, config_file, scaling_method='min_m
         masked_image.paste(crop_area, roi)
 
     # Save or show the resulting image
-    masked_image.show()
+    #masked_image.show()
     #masked_image.save("high_quality_ROIs.tiff")
 
     #Filter out top 3 ROIs
@@ -291,48 +301,11 @@ def preprocessing_image_selection(image_path, config_file, scaling_method='min_m
         masked_image.paste(crop_area, roi)
 
     # Save or show the resulting image
-    masked_image.show()
+    #masked_image.show()
     # Save the image
     #masked_image.save("top_3_ROIs.tiff")
 
-    return top_ROIs
-
-from PIL import Image
-
-def save_rois_image(image_path, rois, output_path):
-    """
-    Crops regions of interest from an image and saves each as a new TIFF file.
-
-    Args:
-    image_path (str): Path to the original image.
-    rois (list of tuples): A list of tuples, each containing the coordinates (x, y, width, height) of a rectangle ROI.
-    output_path (str): Directory where the cropped images will be saved.
-    """
-    # Open the original image
-    image = Image.open(image_path)
-    
-    # Get the base name for the image without the path and extension
-    base_name = os.path.splitext(os.path.basename(image_path))[0]
-    
-    # Process each ROI
-    for i, (x, y, width, height) in enumerate(rois):
-        # Crop the image using the coordinates
-        cropped_image = image.crop((x, y, x + width, y + height))
-        
-        # Create a file name that includes the original image name and ROI coordinates
-        roi_file_name = f"{base_name}_roi_{x}_{y}_{width}_{height}.tif"
-
-        # Create folder for output if it does not exist
-        if not os.path.exists(output_path):
-            os.makedirs(output_path)
-        
-        # Create the full path to save the cropped image
-        full_path = os.path.join(output_path, roi_file_name)
-        
-        # Save the cropped image as a TIFF file
-        cropped_image.save(full_path)
-
-    print(f"All ROIs have been saved in {output_path}")
+    return top_ROIs, all_metrics_df
 
 
     

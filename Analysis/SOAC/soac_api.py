@@ -79,6 +79,10 @@ def obtain_df_result_snakes(snakes_folder):
 
     return snakes_df, junctions_df
 
+
+
+
+
 def soac_api(image_path, parameter_file, executable_path, output_dir):
     """
     Run the SOAC analysis on the given input image and return the results as DataFrames.
@@ -90,8 +94,6 @@ def soac_api(image_path, parameter_file, executable_path, output_dir):
     # Obtain the results from the output directory
     snakes_df, junctions_df = obtain_df_result_snakes(image_path)
     
-    # Save as csv files in the output directory
-    snakes_df.to_csv(os.path.join(output_dir, 'snakes.csv'), index=False)
-    junctions_df.to_csv(os.path.join(output_dir, 'junctions.csv'), index=False)
+    return snakes_df, junctions_df
 
 
