@@ -93,15 +93,17 @@ def main():
                     # Add both files to a list
                     tm_files = [czi_file, trackmate_file]
 
-                    if len(czi_files) > 1:
-                        tm_file = organize_file_into_folder(file_name = czi_file, files = tm_files)
+                    #if len(czi_files) > 1:
+                    #    tm_file = organize_file_into_folder(file_name = czi_file, files = tm_files)
 
-                    folder = os.path.dirname(tm_file)
+                    tm_file = organize_file_into_folder(file_name = czi_file, files = tm_files)
+
+                    new_folder = os.path.dirname(tm_file)
                     df = pd.read_csv(tm_file)
 
                     localizations = process_tracks(df, 'trackmate')
 
-                    save_csv_file(folder, localizations, f'{os.path.basename(tm_file).split(".c")[0]}_blink_stats.csv')
+                    save_csv_file(new_folder, localizations, f'{os.path.basename(tm_file).split(".c")[0]}_blink_stats.csv')
 
     else:
         print("Invalid option selected.")
