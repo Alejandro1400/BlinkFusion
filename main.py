@@ -7,7 +7,7 @@ from Analysis.SOAC.analytics_soac_filaments import soac_analytics_pipeline
 from Analysis.SOAC.preprocessing_image_selection import *
 from Analysis.SOAC.analytics_ridge_filaments import analyze_data
 from Analysis.SOAC.soac_api import soac_api
-from Analysis.STORM.analytics_storm_pipeline import analyze_data_storm
+from Analysis.STORM.track_storm import analyze_data_storm
 from Analysis.STORM.molecule_merging import process_tracks
 from Data_access import box_connection
 from Data_access.file_explorer import *
@@ -76,7 +76,7 @@ def main():
             valid_folders = find_valid_folders(
                 folder_path,
                 required_files={'.czi','trackmate.csv'},
-                exclude_files={'blink_stats.csv'}
+                exclude_files={'locs_blink_stats.csv', 'track_blink_stats.csv', 'mol_blink_stats.csv'},
             )
 
             print(valid_folders)
@@ -88,22 +88,24 @@ def main():
                 for czi_file in czi_files:
                     # Obtain file name without directory and extension
                     czi_filename = os.path.basename(czi_file).split(".c")[0]
-                    trackmate_file = find_items(base_directory=folder, item=f'{czi_filename}_trackmate.csv', is_folder=False, check_multiple=False, search_by_extension=False)
+                    tm_file = find_items(base_directory=folder, item=f'{czi_filename}_trackmate.csv', is_folder=False, check_multiple=False, search_by_extension=False)
 
                     # Add both files to a list
-                    tm_files = [czi_file, trackmate_file]
+                    #tm_files = [czi_file, trackmate_file]
 
                     #if len(czi_files) > 1:
                     #    tm_file = organize_file_into_folder(file_name = czi_file, files = tm_files)
 
-                    tm_file = organize_file_into_folder(file_name = czi_file, files = tm_files)
+                    #tm_file = organize_file_into_folder(file_name = czi_file, files = tm_files)
 
                     new_folder = os.path.dirname(tm_file)
                     df = pd.read_csv(tm_file)
 
-                    localizations = process_tracks(df, 'trackmate')
+                    localizations, tracks, molecules = process_tracks(df, 'trackmate')
 
-                    save_csv_file(new_folder, localizations, f'{os.path.basename(tm_file).split(".c")[0]}_blink_stats.csv')
+                    save_csv_file(new_folder, localizations, f'{os.path.basename(tm_file).split(".c")[0]}_locs_blink_stats.csv')
+                    save_csv_file(new_folder, tracks, f'{os.path.basename(tm_file).split(".c")[0]}_track_blink_stats.csv')
+                    save_csv_file(new_folder, molecules, f'{os.path.basename(tm_file).split(".c")[0]}_mol_blink_stats.csv')
 
     else:
         print("Invalid option selected.")

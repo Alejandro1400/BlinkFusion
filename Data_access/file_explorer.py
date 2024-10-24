@@ -5,55 +5,6 @@ from skimage import io
 from Analysis.SOAC.analytics_ridge_filaments import analyze_data
 from PIL import Image
 
-def load_data_ridge_detector_processing(folder_path):
-    """Check if the specified files exist in the folder_path without a processed file."""
-    required_files = {'Results.csv', 'Junctions.csv', '.tif'}
-    found_files = set()
-
-    for file in os.listdir(folder_path):
-        for req in required_files:
-            if file.endswith(req):
-                found_files.add(req)
-            elif file.endswith('Processed.csv'):
-                return False
-
-    if found_files == required_files:
-        return True
-    
-    return False
-
-def load_data_soac_preprocessing(folder_path):
-    """Check if the specified files exist in the folder_path without a processed file."""
-    required_files = {'.tif'}
-    found_files = set()
-
-    for file in os.listdir(folder_path):
-        for req in required_files:
-            if file.endswith(req):
-                found_files.add(req)
-            elif file.endswith('snakes.csv') or file.endswith('junctions.csv'):
-                return False
-
-    if found_files == required_files:
-        return True
-    
-    return False
-
-def load_data_ridge_detector_analytics(folder_path):
-    """Check if the specified files exist in the folder_path."""
-    required_files = {'rd_proc.csv'}
-    found_files = set()
-
-    for file in os.listdir(folder_path):
-        for req in required_files:
-            if file.endswith(req):
-                found_files.add(req)
-
-    if found_files == required_files:
-        return True
-    
-    return False
-
 def check_data(folder_path, required_files, exclude_files=None, exclude_folders=None):
     """
     Check the specified folder for required files, count them, and handle excluded files and folders.
@@ -118,48 +69,6 @@ def find_valid_folders(folder_path, required_files, exclude_files=None, exclude_
 
     return valid_folders
 
-
-def ridge_detector_folders_processing(folder_path):
-    """Recursively search and return a list of valid sub-folders."""
-    valid_folders = []
-    if load_data_ridge_detector_processing(folder_path):
-        valid_folders.append(folder_path)
-
-    for subdir in os.listdir(folder_path):
-        sub_path = f"{folder_path}/{subdir}"
-        if os.path.isdir(sub_path):
-            valid_folders.extend(ridge_detector_folders_processing(sub_path))  # Recursive call
-
-    return valid_folders
-
-
-def soac_folders_processing(folder_path):
-    """Recursively search and return a list of valid sub-folders."""
-    valid_folders = []
-    if load_data_soac_preprocessing(folder_path):
-        valid_folders.append(folder_path)
-
-    for subdir in os.listdir(folder_path):
-        sub_path = os.path.join(folder_path, subdir)
-        if os.path.isdir(sub_path):
-            valid_folders.extend(soac_folders_processing(sub_path))  # Recursive call
-
-    return valid_folders
-
-
-def ridge_detector_folders_analytics(folder_path):
-    """Recursively search and return a list of valid sub-folders."""
-    valid_folders = []
-    if load_data_ridge_detector_analytics(folder_path):
-        valid_folders.append(folder_path)
-
-    for subdir in os.listdir(folder_path):
-        sub_path = os.path.join(folder_path, subdir)
-        if os.path.isdir(sub_path):
-            valid_folders.extend(ridge_detector_folders_analytics(sub_path))  # Recursive call
-
-    return valid_folders
-
 def processing_data(folder_path):
     for file in os.listdir(folder_path):
         if file.endswith('Results.csv'):
@@ -206,46 +115,47 @@ def save_processed_data(results, original_folder_path, results_folder_path):
     results.to_csv(os.path.join(results_folder_path, f'{filename}_Processed.csv'), index=False)
 
 
-def find_items(base_directory=None, item="Data", is_folder=True, check_multiple=False, search_by_extension=False):
+def find_items(base_directory=None, item=None, is_folder=False, search_by_extension=False, check_multiple=False):
     """
-    Search for a folder or file within the directory tree starting from the base directory.
-    Optionally checks for multiple occurrences of a specified file type or name, but stops searching
-    further subdirectories once a match is found in a single directory.
+    Find the specified item within the base directory.
 
     Args:
-    base_directory (str): The starting directory for the search.
-    item (str): The name of the folder or file to find, or the file extension to look for if search_by_extension is True.
-    is_folder (bool): Flag indicating whether to search for a folder (True) or a file (False).
-    check_multiple (bool): If True, search for multiple files of the given type or name in the first matching directory only.
-    search_by_extension (bool): If True, search items by their extension, otherwise by their name.
+    base_directory (str): The base directory to search within.
+    item (str): The item to search for (file name or extension).
+    is_folder (bool): Whether the item is a folder (default is False).
+    search_by_extension (bool): Whether to search by extension (default is False).
+    check_multiple (bool): Whether to check for multiple items (default is False).
 
     Returns:
-    str or list: The full path to the folder or file if found, or a list of files if check_multiple is True.
-
-    Raises:
-    FileNotFoundError: If the specified folder or file is not found.
+    str or list: The path to the found item or a list of paths if check_multiple is True.
     """
     if base_directory is None:
         base_directory = os.getcwd()  # Use current working directory if no base is provided
     
     for root, dirs, files in os.walk(base_directory):
-        if check_multiple and not is_folder:
-            # Search for multiple files by extension or name
-            if search_by_extension:
-                filtered_files = [os.path.join(root, f) for f in files if f.endswith(item)]
+        # If searching for files
+        if not is_folder:
+            # If checking for multiple files
+            if check_multiple:
+                if search_by_extension:
+                    filtered_files = [os.path.join(root, f) for f in files if f.endswith(item)]
+                else:
+                    filtered_files = [os.path.join(root, f) for f in files if f == item]
+                
+                if filtered_files:
+                    return filtered_files  # Return all found files
             else:
-                filtered_files = [os.path.join(root, f) for f in files if f == item]
-            
-            if filtered_files:
-                # Found files, return and stop searching further
-                return filtered_files
+                # If search by extension is True and we're not checking for multiple files
+                if search_by_extension:
+                    for f in files:
+                        if f.endswith(item):
+                            return os.path.join(root, f)  # Return the first file that matches the extension
+                else:
+                    if item in files:
+                        return os.path.join(root, item)  # Return the first exact match file
 
+        # If searching for a folder
         elif is_folder and item in dirs:
-            # Return the first found directory if not checking for multiples
-            return os.path.join(root, item)
-
-        elif not is_folder and item in files:
-            # Return the first found file if not checking for multiples
             return os.path.join(root, item)
 
     raise FileNotFoundError(f"No matching {item} found within the specified directory.")
@@ -337,3 +247,63 @@ def save_csv_file(folder, df, file_name):
     df.to_csv(file_path, index=False)
     print(f"Data saved to: {file_path}")
     return file_path
+
+def read_folder_structure(file_path):
+    """
+    Read the folder structure from a text file and return the contents as a list of folder types.
+    
+    Args:
+    file_path (str): The path to the text file containing the folder structure.
+    
+    Returns:
+    list: A list of folder types based on the file content.
+    """
+    folder_types = []
+    
+    # Open the text file and read each line
+    with open(file_path, 'r') as file:
+        folder_types = [line.strip() for line in file if line.strip()]
+    
+    return folder_types
+
+def assign_structure_folders(base_directory, folder_structure_file, data_folders):
+    """
+    Assign the data folders to their respective structure folders based on the folder structure file.
+    
+    Args:
+    base_directory (str): The base directory to search for data folders.
+    folder_structure_file (str): The path to the text file containing the folder structure.
+    data_folders (list): A list of full data folder paths to assign to structure folders.
+    
+    Returns:
+    df: A dataframe with folder_structure as columns and data_folders as rows with assigned folders.
+    """
+    # Read the folder structure from the text file
+    folder_structure = read_folder_structure(folder_structure_file)
+    
+    # Initialize an empty list to store the folder mappings
+    folder_mappings = {folder_type: [] for folder_type in folder_structure}
+    folder_mappings['identifier'] = []
+    
+    # Iterate through each data folder (full path)
+    for folder in data_folders:
+        # Get the relative path from the base directory
+        relative_path = os.path.relpath(folder, base_directory)
+        
+        # Split the relative path by the directory separator
+        folder_names = relative_path.split(os.sep)
+        
+        # Assign each folder name to the corresponding structure based on the folder structure order
+        for i, folder_type in enumerate(folder_structure):
+            if i < len(folder_names):
+                folder_mappings[folder_type].append(folder_names[i])
+            else:
+                folder_mappings[folder_type].append(None)  # Handle missing folders if the structure is deeper than the actual data
+
+        # Assign the last folder as identifier
+        folder_mappings['identifier'].append(folder_names[-1])
+    
+    # Create a dataframe from the folder mappings
+    df = pd.DataFrame(folder_mappings)
+    
+    return df

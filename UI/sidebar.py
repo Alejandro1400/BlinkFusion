@@ -1,68 +1,34 @@
 import streamlit as st
 
-from config import connect_storage
-
 def setup_sidebar():
     with st.sidebar:
-        selected_page = st.selectbox("Select Analysis Type", ["SOAC Filament Analysis", "PulseSTORM Analysis"])
+        # Select analysis type
+        selected_analysis_type = st.selectbox("Select Analysis Type", ["SOAC Filament Analysis", "PulseSTORM Analysis"], key="analysis_type")
 
-        # Configuration Expander for SOAC Filament
-        with st.expander("Filament Storage Configuration", expanded=False):
-            filament_storage = st.radio("Connect Filament Storage via", ["Box", "File Explorer"], key="filament_storage")
-            
-            if filament_storage == "Box":
-                auth_method = st.selectbox(
-                    "Choose Authentication Method", 
-                    ["Authentication File", "Developer Token"], 
-                    key="box_auth_method_filament"
-                )
-
-                auth_file = None
-                developer_token = None
-                fila_box_client = None
-                if auth_method == "Authentication File":
-                    auth_file = st.text_input("Enter Box Auth File", key="filament_box_auth_file")
-                
-                elif auth_method == "Developer Token":
-                    developer_token = st.text_input("Enter Box Developer Token", key="filament_box_developer_token")
-
-                if st.button("Connect to Box for Filament", key="connect_box_filament"):
-                    st.session_state.fila_box_client = connect_storage(auth_method, auth_file, developer_token)
-
-            elif filament_storage == "File Explorer":
+        # Configuration Expander for Filament
+        if selected_analysis_type == "SOAC Filament Analysis":
+            with st.expander("Filament Storage Configuration", expanded=False):
                 filament_folder = st.text_input("Enter Folder Path for Filament Data", key="filament_folder_path")
-                if st.button("Set Folder Path for Filament", key="set_folder_filament"):
-                    # Assuming a function to validate or set the folder path
-                    st.success(f"Folder path set: {filament_folder}")
+                if st.button("Set Filament Path", key="set_filament_path"):
+                    st.session_state.filament_folder = filament_folder
+                    st.success(f"Folder path set to: {filament_folder}")
 
         # Configuration Expander for pulseSTORM
-        with st.expander("pulseSTORM Storage Configuration", expanded=False):
-            pulseSTORM_storage = st.radio("Connect pulseSTORM Storage via", ["Box", "File Explorer"], key="pulseSTORM_storage")
-            
-            if pulseSTORM_storage == "Box":
-                auth_method = st.selectbox(
-                    "Choose Authentication Method", 
-                    ["Authentication File", "Developer Token"], 
-                    key="box_auth_method_pulseSTORM"
-                )
-
-                auth_file = None
-                developer_token = None
-                storm_box_client = None
-                if auth_method == "Authentication File":
-                    auth_file = st.file_uploader("Upload Box Authentication File", type=['txt'], key="pulseSTORM_box_auth_file")
-                
-                elif auth_method == "Developer Token":
-                    developer_token = st.text_input("Enter Box Developer Token", key="pulseSTORM_box_developer_token")
-
-                if st.button("Connect to Box for pulseSTORM", key="connect_box_pulseSTORM"):
-                    st.session_state.storm_box_client = connect_storage(auth_method, auth_file, developer_token)
-
-            elif pulseSTORM_storage == "File Explorer":
-                # Open a file dialog to select folder path
+        elif selected_analysis_type == "PulseSTORM Analysis":
+            with st.expander("pulseSTORM Storage Configuration", expanded=False):
                 pulseSTORM_folder = st.text_input("Enter Folder Path for pulseSTORM Data", key="pulseSTORM_folder_path")
-                if st.button("Set Folder Path for pulseSTORM", key="set_folder_pulseSTORM"):
-                    # Assuming a function to validate or set the folder path
-                    st.success(f"Folder path set: {filament_folder}")
+                if st.button("Set PulseSTORM Path", key="set_pulseSTORM_path"):
+                    st.session_state.pulseSTORM_folder = pulseSTORM_folder
+                    st.success(f"Folder path set to: {pulseSTORM_folder}")
 
-    return {"selected_page": selected_page}
+        # Select page for both analyses
+        selected_page = st.selectbox("Select Page", ["History", "Compare"], key="selected_page")
+
+        # Start button to confirm selection
+        if st.button("Start", key="start_button"):
+            return {
+                "analysis_type": selected_analysis_type,
+                "selected_page": selected_page
+            }
+
+    return None

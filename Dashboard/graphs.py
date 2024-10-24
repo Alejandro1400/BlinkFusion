@@ -88,7 +88,7 @@ def create_boxplot(data, x_label, y_label, outliers):
 
 def create_histogram(data, x_label, bins, title, histtype='step'):
     # Grab only from where Sample corresponds to the title
-    data = data[data['Sample'] == title]
+    #data = data[data['Sample'] == title]
 
     if x_label == 'Netw/Cont':
         # Only keep the columns Sample, Cell, and y_label
@@ -235,3 +235,95 @@ def create_radar_chart(df, id_column='Sample'):
         radar.plot(data, label=row[id_column])
     
     return fig
+
+
+
+def calculate_duty_cycle(molecules, tracks, time_bins):
+    duty_cycles = {}
+
+    start_frame_dict = dict(zip(tracks['TRACK_ID'], tracks['START_FRAME']))
+    end_frame_dict = dict(zip(tracks['TRACK_ID'], tracks['END_FRAME']))
+
+    # Map START_FRAME and END_FRAME for START_TRACK and END_TRACK onto the molecules DataFrame
+    molecules['START_FRAME_start'] = molecules['START_TRACK'].map(start_frame_dict)
+    molecules['END_FRAME_start'] = molecules['START_TRACK'].map(end_frame_dict)
+    molecules['END_FRAME_end'] = molecules['END_TRACK'].map(end_frame_dict)
+
+    for start_bin in time_bins:
+        end_bin = start_bin + 1000  # Define the length of the bin
+        
+        # Create dictionaries from tracks to map START_FRAME and END_FRAME for START_TRACK and END_TRACK
+        # Filter molecules based on the given criteria
+        filtered_molecules = molecules[
+            (molecules['START_FRAME_start'] <= end_bin) &  # Molecule starts before or during the bin
+            (
+                (molecules['BLEACHED'] == False) |  # Molecule is not bleached
+                ((molecules['BLEACHED'] == True) & (molecules['END_FRAME_end'] > end_bin))  # Molecule is bleached but ends after the bin
+            )
+        ]
+
+        mol_id_list = filtered_molecules['MOLECULE_ID'].tolist()
+        
+        total_on_time = 0
+        total_possible_time = len(filtered_molecules) * 1000
+        
+        # For each molecule, find relevant tracks
+        for mol_id in mol_id_list:
+            # Find relevant tracks for this molecule
+            relevant_tracks = tracks[(tracks['MOLECULE_ID'] == mol_id) &
+                                    ((tracks['START_FRAME'] <= end_bin) & (tracks['START_FRAME'] >= start_bin) |
+                                    (tracks['END_FRAME'] >= start_bin) & (tracks['END_FRAME'] <= end_bin))]
+            
+            # Calculate on-time for each relevant track
+            for _, track in relevant_tracks.iterrows():
+                # Adjust start and end frame to the bin
+                adjusted_start = max(track['START_FRAME'], start_bin)
+                adjusted_end = min(track['END_FRAME'], end_bin)
+
+                # Calculate the on-time for this track in the bin
+                on_time = adjusted_end - adjusted_start
+                total_on_time += on_time
+
+        
+        # Calculate duty cycle for the bin
+        if total_possible_time > 0:
+            duty_cycle = total_on_time / total_possible_time
+        else:
+            duty_cycle = 0
+        
+        duty_cycles[f'{start_bin}-{end_bin}'] = duty_cycle
+
+    return pd.Series(duty_cycles)
+
+
+def calculate_survival_fraction(molecules, tracks, time_bins):
+    survival_fractions = {}
+
+    start_frame_dict = dict(zip(tracks['TRACK_ID'], tracks['START_FRAME']))
+    end_frame_dict = dict(zip(tracks['TRACK_ID'], tracks['END_FRAME']))
+
+    # Map START_FRAME and END_FRAME for START_TRACK and END_TRACK onto the molecules DataFrame
+    molecules['START_FRAME_start'] = molecules['START_TRACK'].map(start_frame_dict)
+    molecules['END_FRAME_start'] = molecules['START_TRACK'].map(end_frame_dict)
+    molecules['END_FRAME_end'] = molecules['END_TRACK'].map(end_frame_dict)
+
+    for start_bin in time_bins:
+        end_bin = start_bin + 1000  # Define the length of the bin
+        
+        # Create dictionaries from tracks to map START_FRAME and END_FRAME for START_TRACK and END_TRACK
+        # Filter molecules based on the given criteria
+        # Filter molecules that start before the end of the bin
+        possible_survivors = molecules
+        total_possible = len(possible_survivors)
+
+        # Count molecules that are bleached but survived past the end of the bin
+        survivors = possible_survivors[
+            (possible_survivors['BLEACHED'] == False) |
+            ((possible_survivors['BLEACHED'] == True) & (possible_survivors['END_FRAME_end'] > end_bin))
+        ].count()['MOLECULE_ID']
+        
+        # Calculate survival fraction for the bin
+        survival_fraction = survivors / total_possible if total_possible > 0 else 0
+        survival_fractions[f'{start_bin}-{end_bin}'] = survival_fraction
+
+    return pd.Series(survival_fractions)
