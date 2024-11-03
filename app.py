@@ -1,33 +1,31 @@
 # app.py
 import streamlit as st
-from UI.soac_filament_ui import run_soac_ui
+from UI.soac_ui import run_soac_ui
 #from UI.storm_ui import run_storm_ui
 from UI.sidebar import setup_sidebar
 from UI.storm_ui import run_storm_ui
 
-
 def main():
     st.title("PulseSTORM")
 
-    # Setup the sidebar with configurations
-    config = setup_sidebar()
+    # Call setup sidebar
+    setup_sidebar()
 
-    if config is not None:
-        if config["analysis_type"] == "SOAC Filament Analysis":
-            st.header("SOAC Filament Analysis")
-            # Check if the folder and file are available and proceed
-            if 'filament_folder' in st.session_state:
-                run_soac_ui(st.session_state.filament_folder)
-            else:
-                st.error("Filament folder or file is not set. Please configure the path name.")
+    # Proceed with analysis if the Start button was clicked
+    if 'start_analysis' in st.session_state and st.session_state.start_analysis:
+        analysis_type = st.session_state.selected_analysis_type
+        st.header(f"{analysis_type} Analysis")
 
-        elif config["analysis_type"] == "PulseSTORM Analysis":
-            st.header("PulseSTORM Analysis")
-            # Check if the folder and file are available and proceed
-            if 'pulseSTORM_folder' in st.session_state:
-                run_storm_ui(st.session_state.pulseSTORM_folder)
-            else:
-                st.error("pulseSTORM folder or file is not set. Please configure the path name.")
+        folder_key = 'filament_folder' if analysis_type == "SOAC Filament Analysis" else 'pulseSTORM_folder'
+        
+        if folder_key in st.session_state and st.session_state[folder_key]:
+            # Assuming these functions handle the UI for each analysis type
+            run_function = run_soac_ui if analysis_type == "SOAC Filament Analysis" else run_storm_ui
+            run_function(st.session_state[folder_key])
+        else:
+            st.error(f"{analysis_type} folder or file is not set. Please configure the path name.")
+    else:
+        st.info("Please configure the analysis type and path before starting.")
 
 if __name__ == "__main__":
     main()

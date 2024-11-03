@@ -238,8 +238,11 @@ def create_radar_chart(df, id_column='Sample'):
 
 
 
-def calculate_duty_cycle(molecules, tracks, time_bins):
+def calculate_duty_cycle(molecules, tracks, interval, total_frames):
     duty_cycles = {}
+    time_bins = range(0, total_frames, interval)
+
+    frame_rate = 50/1000  # 50 ms per frame
 
     start_frame_dict = dict(zip(tracks['TRACK_ID'], tracks['START_FRAME']))
     end_frame_dict = dict(zip(tracks['TRACK_ID'], tracks['END_FRAME']))
@@ -250,7 +253,7 @@ def calculate_duty_cycle(molecules, tracks, time_bins):
     molecules['END_FRAME_end'] = molecules['END_TRACK'].map(end_frame_dict)
 
     for start_bin in time_bins:
-        end_bin = start_bin + 1000  # Define the length of the bin
+        end_bin = start_bin + interval
         
         # Create dictionaries from tracks to map START_FRAME and END_FRAME for START_TRACK and END_TRACK
         # Filter molecules based on the given criteria
@@ -265,7 +268,7 @@ def calculate_duty_cycle(molecules, tracks, time_bins):
         mol_id_list = filtered_molecules['MOLECULE_ID'].tolist()
         
         total_on_time = 0
-        total_possible_time = len(filtered_molecules) * 1000
+        total_possible_time = len(filtered_molecules) * interval
         
         # For each molecule, find relevant tracks
         for mol_id in mol_id_list:
@@ -290,14 +293,20 @@ def calculate_duty_cycle(molecules, tracks, time_bins):
             duty_cycle = total_on_time / total_possible_time
         else:
             duty_cycle = 0
-        
-        duty_cycles[f'{start_bin}-{end_bin}'] = duty_cycle
+
+        # Convert to seconds the end_bin
+        start_bin_seconds = start_bin * frame_rate
+
+        duty_cycles[start_bin_seconds] = duty_cycle
 
     return pd.Series(duty_cycles)
 
 
-def calculate_survival_fraction(molecules, tracks, time_bins):
+def calculate_survival_fraction(molecules, tracks, interval, total_frames):
     survival_fractions = {}
+    time_bins = range(0, total_frames, interval)
+
+    frame_rate = 50/1000  # 50 ms per frame
 
     start_frame_dict = dict(zip(tracks['TRACK_ID'], tracks['START_FRAME']))
     end_frame_dict = dict(zip(tracks['TRACK_ID'], tracks['END_FRAME']))
@@ -307,23 +316,91 @@ def calculate_survival_fraction(molecules, tracks, time_bins):
     molecules['END_FRAME_start'] = molecules['START_TRACK'].map(end_frame_dict)
     molecules['END_FRAME_end'] = molecules['END_TRACK'].map(end_frame_dict)
 
-    for start_bin in time_bins:
-        end_bin = start_bin + 1000  # Define the length of the bin
-        
-        # Create dictionaries from tracks to map START_FRAME and END_FRAME for START_TRACK and END_TRACK
-        # Filter molecules based on the given criteria
-        # Filter molecules that start before the end of the bin
-        possible_survivors = molecules
-        total_possible = len(possible_survivors)
+    # Number of molecules 
+    total_molecules = len(molecules)
 
-        # Count molecules that are bleached but survived past the end of the bin
-        survivors = possible_survivors[
-            (possible_survivors['BLEACHED'] == False) |
-            ((possible_survivors['BLEACHED'] == True) & (possible_survivors['END_FRAME_end'] > end_bin))
-        ].count()['MOLECULE_ID']
+    # Number of survivors as those where END_FRAME_end occurs before 60% of the total frames
+    bleached_molecules = molecules[molecules['END_FRAME_end'] < 0.6 * total_frames]
+
+    bleached_count = 0
+
+    # Remove last bin from time_bins
+    time_bins = time_bins[:-1]
+    for start_bin in time_bins:
+        end_bin = start_bin + interval  # Define the length of the bin
+        
+        # Filter molecules where END_FRAME_end occurs before 60% of the total frames
+        bleached_interval = bleached_molecules[
+            (bleached_molecules['START_FRAME_start'] > start_bin) &  # Molecule starts before or during the bin
+            (bleached_molecules['END_FRAME_end'] <= end_bin)  # Molecule ends after the bin
+        ]
+
+        bleached_count += len(bleached_interval)
         
         # Calculate survival fraction for the bin
-        survival_fraction = survivors / total_possible if total_possible > 0 else 0
-        survival_fractions[f'{start_bin}-{end_bin}'] = survival_fraction
+        survival_fraction = (total_molecules-bleached_count) / total_molecules if total_molecules > 0 else 0
+
+        # Convert to seconds the end_bin
+        end_bin_seconds = end_bin * frame_rate
+
+        if start_bin == 0:
+            survival_fractions[0] = 1
+
+        survival_fractions[end_bin_seconds] = survival_fraction
 
     return pd.Series(survival_fractions)
+
+
+def plot_time_series_interactive(duty_cycles, survival_fraction):
+    # Create figure with secondary y-axis
+    fig = go.Figure()
+
+    # Add traces
+    fig.add_trace(
+        go.Scatter(x=duty_cycles.index, y=duty_cycles, name='Duty Cycle', mode='lines', line=dict(color='red'), yaxis='y')
+    )
+
+    fig.add_trace(
+        go.Scatter(x=survival_fraction.index, y=survival_fraction, name='Survival Fraction', mode='lines', line=dict(color='blue', dash='dot'), yaxis='y2')
+    )
+
+    # Create axis objects
+    fig.update_layout(
+        xaxis=dict(title='Time (s)', showgrid=False, titlefont=dict(color='black'), tickfont=dict(color='black')),
+        yaxis=dict(title='Duty Cycle', titlefont=dict(color='black'), tickfont=dict(color='red'), range=[0, max(duty_cycles)*1.1], showgrid=False),
+        yaxis2=dict(title='Survival Fraction', titlefont=dict(color='black'), tickfont=dict(color='blue'), overlaying='y', side='right', range=[0, 1], showgrid=False),
+        title='Duty Cycle and Survival Fraction Over Time'
+    )
+
+    # Update layout to be more aesthetically pleasing
+    fig.update_layout(showlegend=False, plot_bgcolor='white', paper_bgcolor='white')
+
+    return fig
+
+
+def plot_intensity_vs_frame(plot_data):
+    time = plot_data.index * 50 / 1000  # Convert frame to time in seconds
+    # Create a Plotly figure
+    fig = go.Figure()
+
+    # Add a fill area trace
+    fig.add_trace(go.Scatter(
+        x=time,  # Use the time variable for the x-axis
+        y=plot_data['INTENSITY'],
+        fill='tozeroy',  # Fill to zero on the y-axis
+        mode='lines',  # Line plot
+        line_color='black',  # Line color
+        line_shape='hv'  # Horizontal and vertical steps
+    ))
+
+    # Customize layout
+    fig.update_layout(
+        title='Intensity vs Frame',
+        xaxis=dict(title='Time (s)', range=[0, 500]),
+        xaxis_title='Time (s)',
+        yaxis_title='Intensity',
+        template='plotly_white',  # White background template
+        showlegend=False  # Do not show legend
+    )
+
+    return fig

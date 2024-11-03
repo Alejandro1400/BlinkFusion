@@ -154,4 +154,66 @@ def soac_analytics_pipeline(snakes, junctions):
     snakes = fix_soac_df(snakes)
     
     return snakes
+
+
+def weighted_avg_and_std(values, weights):
+    """
+    Return the weighted average and standard deviation.
+    values, weights -- Numpy ndarrays with the same shape.
+    """
+    average = np.average(values, weights=weights)
+    variance = np.average((values-average)**2, weights=weights)  # Fast and numerically precise
+    return (average, np.sqrt(variance))
+
+def obtain_cell_metrics(snakes):
+    # Group by both 'File' and 'Snake', then apply the metrics calculation
+    result = snakes.groupby(['File', 'Snake']).apply(calculate_snake_metrics)
+
+    # Preparing to calculate weighted averages and std deviation
+    weighted_metrics = {}
+    metrics = ['Intensity', 'SNR', 'Contrast', 'Continuity', 'Sinuosity']
     
+    for metric in metrics:
+        weighted_avg, weighted_std = weighted_avg_and_std(
+            result[metric].values, 
+            result['Length'].values
+        )
+        weighted_metrics[f'{metric} (mean)'] = weighted_avg
+        weighted_metrics[f'{metric} (std)'] = weighted_std
+
+    # Calculate simple mean and std for Length and Junctions as these might not need weighting
+    weighted_metrics['Length (mean)'] = result['Length'].mean()
+    weighted_metrics['Length (std)'] = result['Length'].std()
+    weighted_metrics['Junctions (mean)'] = result['Junctions'].mean()
+    weighted_metrics['Junctions (std)'] = result['Junctions'].std()
+
+    # Put in order so that the means are first and the stds are second
+    weighted_metrics = {k: weighted_metrics[k] for k in weighted_metrics if 'mean' in k} | {k: weighted_metrics[k] for k in weighted_metrics if 'std' in k}
+
+    # Creating DataFrame
+    overall_metrics = pd.DataFrame(weighted_metrics, index=[0])
+
+    return overall_metrics
+
+
+def calculate_snake_metrics(group):
+    std_background = group['Background'].std()
+    mean_background = group['Background'].mean()
+    mean_intensity = group['Intensity'].mean()
+
+    # Calculate SNR for each row within the group
+    SigNr = (mean_intensity - mean_background) / std_background if std_background > 0 else np.nan
+
+    # Define individual metrics
+    metrics = {
+        'Sinuosity': group['Sinuosity'].mean(),
+        # Calculate how many Junction different values are present
+        'Junctions': group['Junction'].nunique(),
+        'Length': group['Length'].mean(),
+        'SNR': SigNr,
+        'Intensity': group['Intensity'].mean(),
+        'Contrast': group['Intensity'].mean() / group['Background'].mean(),
+        'Continuity': ((group['Intensity'] > group['Background']).sum() / len(group['Intensity'])) * 100  # As a percentage
+    }
+
+    return pd.Series(metrics)

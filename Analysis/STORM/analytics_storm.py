@@ -1,7 +1,4 @@
-
-
 import pandas as pd
-
 
 def obtain_molecules_metrics(molecules):
 

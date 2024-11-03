@@ -300,8 +300,10 @@ def assign_structure_folders(base_directory, folder_structure_file, data_folders
             else:
                 folder_mappings[folder_type].append(None)  # Handle missing folders if the structure is deeper than the actual data
 
-        # Assign the last folder as identifier
-        folder_mappings['identifier'].append(folder_names[-1])
+        folder_mappings['identifier'].append(relative_path)
+
+    # Convert all titles to uppercase
+    folder_mappings = {key.upper(): value for key, value in folder_mappings.items()}
     
     # Create a dataframe from the folder mappings
     df = pd.DataFrame(folder_mappings)

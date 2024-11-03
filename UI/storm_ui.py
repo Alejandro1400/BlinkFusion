@@ -5,97 +5,108 @@ import os
 
 from Analysis.STORM.analytics_storm import obtain_molecules_metrics
 from Analysis.STORM.blink_statistics import trackmate_blink_statistics
-from Dashboard.graphs import calculate_duty_cycle, calculate_survival_fraction, create_histogram
+from Dashboard.graphs import calculate_duty_cycle, calculate_survival_fraction, create_histogram, plot_intensity_vs_frame, plot_time_series_interactive
 from Data_access.file_explorer import assign_structure_folders, find_items, find_valid_folders
 
-# Function to load and cache the dataframe from multiple CSV files
+
 @st.cache_data
 def load_storm_data(pulseSTORM_folder):
     # List to store dataframes from all CSVs
     localizations = []
     tracks = []
     molecules = []
-    images = []
+    metrics = []
 
-    # Find the folder structure file (folder_structure.txt)
-    structure_path = find_items(base_directory=pulseSTORM_folder, item='folder_structure.txt', is_folder=False)
+    try:
+        # Find the folder structure file (folder_structure.txt)
+        structure_path = find_items(base_directory=pulseSTORM_folder, item='folder_structure.txt', is_folder=False)
 
-    if structure_path:
-        # Find all valid folders (folders that contain the required files)
-        valid_folders = find_valid_folders(
-            pulseSTORM_folder,
-            required_files={'trackmate_locs_blink_stats.csv', 'trackmate_track_blink_stats.csv', 'trackmate_mol_blink_stats.csv'}
-        )
-
-        print(valid_folders)
-        
-        # Get the folder structure as a DataFrame
-        image_df = assign_structure_folders(pulseSTORM_folder, structure_path, valid_folders)
-
-        # Iterate through each valid folder
-        for folder in valid_folders:
-            locs = find_items(
-                base_directory=folder, 
-                item='trackmate_locs_blink_stats.csv', 
-                is_folder=False, 
-                search_by_extension=True
+        if structure_path:
+            # Find all valid folders (folders that contain the required files)
+            valid_folders = find_valid_folders(
+                pulseSTORM_folder,
+                required_files={'trackmate_locs_blink_stats.csv', 'trackmate_track_blink_stats.csv', 'trackmate_mol_blink_stats.csv'}
             )
 
-            track = find_items(
-                base_directory=folder,
-                item='trackmate_track_blink_stats.csv',
-                is_folder=False,
-                search_by_extension=True
-            )
+            print(valid_folders)
+            
+            # Get the folder structure as a DataFrame
+            image_df = assign_structure_folders(pulseSTORM_folder, structure_path, valid_folders)
 
-            mol = find_items(
-                base_directory=folder,
-                item='trackmate_mol_blink_stats.csv',
-                is_folder=False,
-                search_by_extension=True
-            )
+            # Iterate through each valid folder
+            for folder in valid_folders:
+                locs = find_items(
+                    base_directory=folder, 
+                    item='trackmate_locs_blink_stats.csv', 
+                    is_folder=False, 
+                    search_by_extension=True
+                )
 
-            if locs and track and mol:
-                # Load the dataframes
-                locs_df = pd.read_csv(locs)
-                track_df = pd.read_csv(track)
-                mol_df = pd.read_csv(mol)
-                
-                # Add the folder column with just the last part of the path to each dataframe
-                locs_df['folder'] = os.path.basename(folder)
-                track_df['folder'] = os.path.basename(folder)
-                mol_df['folder'] = os.path.basename(folder)
+                track = find_items(
+                    base_directory=folder,
+                    item='trackmate_track_blink_stats.csv',
+                    is_folder=False,
+                    search_by_extension=True
+                )
 
-                # Obtain mol metrics
-                mol_metrics = obtain_molecules_metrics(mol_df)
+                mol = find_items(
+                    base_directory=folder,
+                    item='trackmate_mol_blink_stats.csv',
+                    is_folder=False,
+                    search_by_extension=True
+                )
 
-                # Merge mol_metrics into image_df correctly
-                mol_metrics['folder'] = os.path.basename(folder)  # Ensure common identifier for merging
-                image_df['folder'] = os.path.basename(folder)  # Ensure common identifier for merging
-                image_df = pd.merge(image_df, mol_metrics, on='folder', how='left')
+                if locs and track and mol:
+                    try:
+                        # Load the dataframes
+                        locs_df = pd.read_csv(locs)
+                        track_df = pd.read_csv(track)
+                        mol_df = pd.read_csv(mol)
+                        
+                        # Calculate the relative path and assign it
+                        relative_path = os.path.relpath(folder, pulseSTORM_folder)
+                        locs_df['IDENTIFIER'] = relative_path
+                        track_df['IDENTIFIER'] = relative_path
+                        mol_df['IDENTIFIER'] = relative_path
 
-                # Append the dataframes to the lists
-                localizations.append(locs_df)
-                tracks.append(track_df)
-                molecules.append(mol_df)
-                images.append(image_df)
+                        # Obtain mol metrics
+                        mol_metrics = obtain_molecules_metrics(mol_df)
+                        mol_metrics['IDENTIFIER'] = relative_path  # Use IDENTIFIER for joining later
 
-                # Eliminate from images the column identifier and folde
-                image_df.drop(columns=['identifier','folder'], inplace=True)
-    
-    # Combine all dataframes into a single dataframe for each type
-    localizations_df, tracks_df, molecules_df, images_df = map(pd.concat, [localizations, tracks, molecules, images])
-    
-    return localizations_df, tracks_df, molecules_df, images_df
+                        # Append the metrics to the list to be processed later
+                        metrics.append(mol_metrics)
+
+                        # Append the dataframes to the lists
+                        localizations.append(locs_df)
+                        tracks.append(track_df)
+                        molecules.append(mol_df)
+                    except Exception as e:
+                        print(f"Failed to process files in {folder}. Error: {e}")
+
+        # Combine all dataframes into a single dataframe for each type
+        localizations_df, tracks_df, molecules_df = map(pd.concat, [localizations, tracks, molecules])
+
+        # Combine all mol_metrics into a single dataframe
+        metrics_df = pd.concat(metrics)
+
+        # Merge mol_metrics with image_df using IDENTIFIER
+        merged_metrics = pd.merge(metrics_df, image_df, on='IDENTIFIER', how='left')
+        # Reorder columns to have image_df columns first, then metrics_df columns, excluding duplicates
+        merged_metrics = merged_metrics[image_df.columns.tolist() + [col for col in merged_metrics.columns if col not in image_df.columns]]
+
+        return localizations_df, tracks_df, molecules_df, image_df, merged_metrics
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return None, None, None, None, None
 
 
 
 # Function to run the PulseSTORM UI
 def run_storm_ui(pulseSTORM_folder):
-    st.subheader("Running PulseSTORM Analysis")
     
     # Load the cached dataframe
-    localizations, tracks, molecules, images = load_storm_data(pulseSTORM_folder)
+    localizations, tracks, molecules, images, metrics = load_storm_data(pulseSTORM_folder)
 
     if localizations.empty or tracks.empty or molecules.empty:
         st.error("No data found in the folder. Please check the folder path.")
@@ -103,16 +114,35 @@ def run_storm_ui(pulseSTORM_folder):
     
     # Display Images loaded
     st.write("Images loaded:")
-    st.dataframe(images)  # Show the first few rows of the dataframe
+    # Reset the index and drop the old one to ensure it does not appear in the display
+    metrics_no_id = metrics.drop(columns=['IDENTIFIER'])
+    st.dataframe(metrics_no_id)
 
-    # Ask the user to select 
-    # Ask the user to select a folder, initially do not filter
-    selected_image = st.selectbox("Select Image", images['Image'].unique(), index=0)
+    # Selection box with state
+    selected_id = st.selectbox("Select Image", images['IDENTIFIER'].unique(), index=0)
 
-    # Filter the dataframes based on the selected folder
-    selected_localizations = localizations[localizations['folder'] == selected_image]
-    selected_tracks = tracks[tracks['folder'] == selected_image]
-    selected_molecules = molecules[molecules['folder'] == selected_image]
+    # Filter dataframes based on the selection
+    selected_localizations = localizations[localizations['IDENTIFIER'] == selected_id]
+    selected_tracks = tracks[tracks['IDENTIFIER'] == selected_id]
+    selected_molecules = molecules[molecules['IDENTIFIER'] == selected_id]
+
+    # Time series values plot
+    interval = 1000
+    total_frames = 10000
+
+    # Plot vs time 
+    st.subheader("Time Plots")
+
+
+    duty_cycles = calculate_duty_cycle(selected_molecules, selected_tracks, interval, total_frames) 
+    survival_fraction = calculate_survival_fraction(selected_molecules, selected_tracks, interval, total_frames)
+
+    # Generate the interactive plot
+    interactive_fig = plot_time_series_interactive(duty_cycles, survival_fraction)
+
+    # Display the plot in Streamlit
+    st.plotly_chart(interactive_fig, use_container_width=True)
+
 
     # Plot histograms of the data
     st.subheader("Histograms")
@@ -124,34 +154,13 @@ def run_storm_ui(pulseSTORM_folder):
     st.pyplot(histogram)
 
 
-    # Molecule on_time histogram
-    st.write("Molecule On Time Histogram")
-    # Select number of bins
-    histogram = create_histogram(selected_molecules, 'TOTAL_ON_TIME', 50, 'On Time per molecule')
-    st.pyplot(histogram)
-
-    # Plot vs time 
-    st.subheader("Time Plots")
-
-    duty_cycles = calculate_duty_cycle(molecules, tracks, range(0, 10000, 1000))  # Example range
-
-    # Plotting with Streamlit
-    st.write("Duty Cycle Over Time")
-    st.line_chart(duty_cycles)
-
-    survival_fraction = calculate_survival_fraction(molecules, tracks, range(0, 10000, 1000))  # Example range
-
-    # Plotting with Streamlit
-    st.write("Survival Fraction Over Time")
-    st.line_chart(survival_fraction)
-
     # Ask select a molecule 
-    selected_molecule = st.selectbox("Select Molecule", molecules['MOLECULE_ID'].unique(), index=4)
+    selected_molecule = st.selectbox("Select Molecule", selected_molecules['MOLECULE_ID'].unique(), index=4)
 
     # Filter the tracks for those with that Mol ID
-    selected_tracks = tracks[tracks['MOLECULE_ID'] == selected_molecule]
+    selected_tracks = selected_tracks[selected_tracks['MOLECULE_ID'] == selected_molecule]
     # Filter the localizations for those with the selected tracks id
-    selected_localizations = localizations[localizations['TRACK_ID'].isin(selected_tracks['TRACK_ID'])]
+    selected_localizations = selected_localizations[selected_localizations['TRACK_ID'].isin(selected_tracks['TRACK_ID'])]
 
     # Prepare the DataFrame for plotting
     plot_data = pd.DataFrame({
@@ -177,15 +186,8 @@ def run_storm_ui(pulseSTORM_folder):
     plot_data = plot_data.reindex(range(plot_data.index.min(), plot_data.index.max() + 1), fill_value=0)
 
     # Plotting with Matplotlib
-    fig, ax = plt.subplots()
-    ax.fill_between(plot_data.index, plot_data['INTENSITY'], color='blue', step='post', alpha=0.5)
-    ax.set_title('Intensity vs Frame')
-    ax.set_xlabel('Frame')
-    ax.set_ylabel('Intensity')
-    ax.grid(True)
-
-    # Display the plot in Streamlit
-    st.pyplot(fig)
+    fig = plot_intensity_vs_frame(plot_data)
+    st.plotly_chart(fig, use_container_width=True)
 
 
 
