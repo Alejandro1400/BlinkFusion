@@ -3,9 +3,8 @@ import streamlit as st
 import pandas as pd
 import os
 
-from Analysis.STORM.analytics_storm import obtain_molecules_metrics
-from Analysis.STORM.blink_statistics import trackmate_blink_statistics
-from Dashboard.graphs import calculate_duty_cycle, calculate_survival_fraction, create_histogram, plot_intensity_vs_frame, plot_time_series_interactive
+from Analysis.STORM.analytics_storm import obtain_molecules_metrics, calculate_duty_cycle, calculate_survival_fraction
+from Dashboard.graphs import create_histogram, plot_intensity_vs_frame, plot_time_series_interactive
 from Data_access.file_explorer import assign_structure_folders, find_items, find_valid_folders
 
 
@@ -103,7 +102,7 @@ def load_storm_data(pulseSTORM_folder):
 
 
 # Function to run the PulseSTORM UI
-def run_storm_ui(pulseSTORM_folder):
+def run_storm_dashboard_ui(pulseSTORM_folder):
     
     # Load the cached dataframe
     localizations, tracks, molecules, images, metrics = load_storm_data(pulseSTORM_folder)
@@ -111,6 +110,23 @@ def run_storm_ui(pulseSTORM_folder):
     if localizations.empty or tracks.empty or molecules.empty:
         st.error("No data found in the folder. Please check the folder path.")
         return
+    
+    # Determine the shared columns between 'images' and 'metrics', excluding 'IDENTIFIER'
+    desc_columns = set(images.columns).intersection(metrics.columns) - {'IDENTIFIER'}
+
+    # Use Streamlit's multiselect to let the user select which columns to group by
+    selected_group_columns = st.multiselect('Select columns to group by:', list(desc_columns))
+
+    if selected_group_columns:
+        # Group the metrics dataframe by the selected columns
+        grouped_metrics = metrics.groupby(selected_group_columns)
+        
+        # Example of showing aggregated data, change 'size()' to other aggregations as needed
+        st.write("Aggregated data based on selected group columns:")
+        display_data = grouped_metrics.size().reset_index(name='Count')
+        st.dataframe(display_data)
+    else:
+        st.write("No columns selected for grouping.")
     
     # Display Images loaded
     st.write("Images loaded:")
@@ -128,7 +144,7 @@ def run_storm_ui(pulseSTORM_folder):
 
     # Time series values plot
     interval = 1000
-    total_frames = 10000
+    total_frames = 40000
 
     # Plot vs time 
     st.subheader("Time Plots")

@@ -9,7 +9,7 @@ from Data_access.file_explorer import assign_structure_folders, find_items, find
 
 
 @st.cache_data
-def load_soac_data(soac_folder):
+def load_filament_data(soac_folder):
     # List to store dataframes from all CSVs
     cells = []
     metrics = []
@@ -77,9 +77,9 @@ def load_soac_data(soac_folder):
         return None, None, None
 
 
-def run_soac_ui(soac_folder):
+def run_filament_dashboard_ui(soac_folder):
 
-    cells, images, metrics = load_soac_data(soac_folder)
+    cells, images, metrics = load_filament_data(soac_folder)
 
     if cells.empty or images.empty or metrics.empty:
         st.error("Failed to load data. Please check the folder structure and contents.")

@@ -1,9 +1,12 @@
 import os
 import shutil
+from xml.dom import minidom
 import pandas as pd
 from skimage import io
+import tifffile
 from Analysis.SOAC.analytics_ridge_filaments import analyze_data
-from PIL import Image
+from PIL import Image, TiffImagePlugin
+import xml.etree.ElementTree as ET
 
 def check_data(folder_path, required_files, exclude_files=None, exclude_folders=None):
     """
@@ -309,3 +312,103 @@ def assign_structure_folders(base_directory, folder_structure_file, data_folders
     df = pd.DataFrame(folder_mappings)
     
     return df
+
+
+def read_tiff_metadata(tif_file_path, root_tag='prop', id_filter=None):
+    """
+    Read specific metadata from a TIFF file's ImageDescription as a plain string based on given root tag and optional ID filter.
+    
+    Args:
+    tif_file_path (str): Path to the TIFF file.
+    root_tag (str): The XML root tag to search for (e.g., 'prop', 'custom-prop').
+    id_filter (str, optional): Specific ID to search for within the root tags.
+
+    Returns:
+    dict: Dictionary of found metadata values corresponding to specified IDs.
+    """
+    with tifffile.TiffFile(tif_file_path) as tif:
+        image_description = tif.pages[0].tags['ImageDescription'].value
+
+    found_metadata = {}
+    # Process each line in the image description
+    for line in image_description.split('\n'):
+        if f'<{root_tag}' in line and (f'id="{id_filter}"' in line if id_filter else True):
+            print(line)
+            # Parsing the attributes assuming a format of <tag id=".." type=".." value=".."/>
+            prop_parts = line.strip('<>/').split()
+            prop_dict = {k.split('=')[0]: k.split('=')[1].strip('"') for k in prop_parts if '=' in k}
+
+            # Convert value to the appropriate type based on 'type' attribute
+            prop_id = prop_dict.get('id')
+            prop_type = prop_dict.get('type')
+            prop_value = prop_dict.get('value')
+            if prop_type == 'int':
+                prop_value = int(prop_value)
+            elif prop_type == 'float':
+                prop_value = float(prop_value)
+            elif prop_type == 'bool':
+                prop_value = prop_value.lower() in ('true', '1', 't')
+
+            found_metadata[prop_id] = (prop_value, prop_type)
+
+    print(f"Found metadata: {found_metadata}") 
+
+    return found_metadata
+                
+
+def append_metadata_tags(tif_file_path, new_tif_file_path, root_tag, tags):
+    """
+    Append metadata tags directly to the ImageDescription of a TIFF file.
+
+    Args:
+    tif_file_path (str): Path to the original TIFF file.
+    new_tif_file_path (str): Path where the modified TIFF file will be saved.
+    tags (list of dicts): List of metadata tags to append, each dict containing 'id', 'type', and 'value'.
+    """
+    with tifffile.TiffFile(tif_file_path) as tif:
+        image = tif.asarray()
+        metadata = tif.pages[0].tags.get('ImageDescription', '').value if 'ImageDescription' in tif.pages[0].tags else ''
+
+        # Find the position to insert new tags (just before </MetaData>)
+        insert_pos = metadata.rfind('</MetaData>')
+        if insert_pos == -1:
+            # If </MetaData> not found, append at the end of the existing metadata
+            insert_pos = len(metadata)
+            metadata += '<MetaData>'
+
+        # Prepare new tags as a string to insert
+        new_tags_str = ''
+        for tag in tags:
+            new_tag = f'<{root_tag} id="{tag["id"]}" type="{tag["type"]}" value="{tag["value"]}"/>'
+            new_tags_str += new_tag
+
+        # Insert new tags into the metadata
+        updated_metadata = metadata[:insert_pos] + new_tags_str + metadata[insert_pos:]
+
+        # Save the modified image to a new file with updated metadata
+        tifffile.imsave(new_tif_file_path, image, description=updated_metadata)
+
+
+def parse_metadata_input(metadata_input):
+    """
+    Parse the metadata input from the Streamlit text input into a list of tuples.
+    The input should be in the format: "Name, Type, Value & Name, Type, Value"
+    """
+    tags = []
+    entries = metadata_input.split('&')
+    for entry in entries:
+        parts = entry.strip().split(',')
+        if len(parts) == 3:
+            tag_name, value_type, value = parts
+            tag_name = tag_name.strip()
+            value = value.strip()
+            if value_type.strip().lower() == 'int':
+                value = int(value)
+            elif value_type.strip().lower() == 'float':
+                value = float(value)
+            elif value_type.strip().lower() == 'bool':
+                value = value.lower() in ('true', '1', 't')
+            tags.append((tag_name, value, value_type.strip().lower()))
+    return tags
+
+
