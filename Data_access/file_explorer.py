@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 from xml.dom import minidom
 import pandas as pd
@@ -8,7 +9,7 @@ from Analysis.SOAC.analytics_ridge_filaments import analyze_data
 from PIL import Image, TiffImagePlugin
 import xml.etree.ElementTree as ET
 
-def check_data(folder_path, required_files, exclude_files=None, exclude_folders=None):
+def check_data(folder_path, required_files, exclude_files=None, exclude_folders=None, single_file=False):
     """
     Check the specified folder for required files, count them, and handle excluded files and folders.
     
@@ -329,34 +330,39 @@ def read_tiff_metadata(tif_file_path, root_tag='prop', id_filter=None):
     with tifffile.TiffFile(tif_file_path) as tif:
         image_description = tif.pages[0].tags['ImageDescription'].value
 
-    found_metadata = {}
+    found_metadata = []
+    # Define a regex to extract tag attributes correctly handling spaces
+    attr_pattern = re.compile(r'(\w+)="([^"]*)"')
+
     # Process each line in the image description
     for line in image_description.split('\n'):
-        if f'<{root_tag}' in line and (f'id="{id_filter}"' in line if id_filter else True):
-            print(line)
-            # Parsing the attributes assuming a format of <tag id=".." type=".." value=".."/>
-            prop_parts = line.strip('<>/').split()
-            prop_dict = {k.split('=')[0]: k.split('=')[1].strip('"') for k in prop_parts if '=' in k}
+        if f'<{root_tag}' in line:
+            # Parse the attributes using regex
+            attrs = dict(attr_pattern.findall(line))
 
-            # Convert value to the appropriate type based on 'type' attribute
-            prop_id = prop_dict.get('id')
-            prop_type = prop_dict.get('type')
-            prop_value = prop_dict.get('value')
-            if prop_type == 'int':
-                prop_value = int(prop_value)
-            elif prop_type == 'float':
-                prop_value = float(prop_value)
-            elif prop_type == 'bool':
-                prop_value = prop_value.lower() in ('true', '1', 't')
+            if id_filter is None or attrs.get('id', '').startswith(id_filter):
+                prop_id = attrs.get('id')
+                prop_type = attrs.get('type')
+                prop_value = attrs.get('value')
 
-            found_metadata[prop_id] = (prop_value, prop_type)
+                # Convert value to the appropriate type based on 'type' attribute
+                if prop_type == 'int':
+                    prop_value = int(prop_value)
+                elif prop_type == 'float':
+                    prop_value = float(prop_value)
+                elif prop_type == 'bool':
+                    prop_value = prop_value.lower() in ('true', '1', 't')
+                    
+                metadata = {'id': prop_id, 'type': prop_type, 'value': prop_value}
+                found_metadata.append(metadata)
 
-    print(f"Found metadata: {found_metadata}") 
+                if id_filter and prop_id == id_filter:
+                    return metadata
 
     return found_metadata
-                
 
-def append_metadata_tags(tif_file_path, new_tif_file_path, root_tag, tags):
+
+def append_metadata_tags(tif_file_path, new_tif_file_path, tags):
     """
     Append metadata tags directly to the ImageDescription of a TIFF file.
 
@@ -379,7 +385,7 @@ def append_metadata_tags(tif_file_path, new_tif_file_path, root_tag, tags):
         # Prepare new tags as a string to insert
         new_tags_str = ''
         for tag in tags:
-            new_tag = f'<{root_tag} id="{tag["id"]}" type="{tag["type"]}" value="{tag["value"]}"/>'
+            new_tag = f'<{tag["root_tag"]} id="{tag["id"]}" type="{tag["type"]}" value="{tag["value"]}"/>\n'
             new_tags_str += new_tag
 
         # Insert new tags into the metadata
@@ -411,4 +417,132 @@ def parse_metadata_input(metadata_input):
             tags.append((tag_name, value, value_type.strip().lower()))
     return tags
 
+
+def get_open_laser_intensity(metadata):
+    """
+    Find the laser that is 'Open' and return its ID along with the corresponding intensity,
+    assuming metadata is given in the format {'id': prop_id, 'type': prop_type, 'value': prop_value}.
+    
+    Args:
+    metadata (list of dicts): List containing metadata with laser statuses and intensities.
+    
+    Returns:
+    str, float: Laser ID and its intensity if open, otherwise None, None.
+    """
+    # Create dictionaries to hold pairs of intensity and power for easy lookup
+    intensity_dict = {}
+    power_dict = {}
+    
+    # Categorize entries into intensity or power based on the id
+    for data in metadata:
+        if "Intensity" in data['id']:
+            intensity_dict[data['id']] = data['value']
+        elif "Power" in data['id']:
+            power_dict[data['id']] = data['value']
+
+    # Search for an open laser and its corresponding intensity
+    for power_key, power_value in power_dict.items():
+        if power_value == "Open":  # Assuming the value directly tells if it's open
+            print(f"Found open laser: {power_key}")
+            # Extract the numeric identifier for the laser from the power key
+            laser_number = re.findall(r'\d+', power_key)
+            laser_number = f"Laser {laser_number[0]}" if laser_number else None
+            if laser_number:
+                # Construct the corresponding intensity key
+                match_intensity_key = next((key for key in intensity_dict.keys() if laser_number in key), None)
+                if match_intensity_key:
+                    intensity = intensity_dict[match_intensity_key]
+                    print(f"Matched intensity key: {match_intensity_key}")
+                    laser_id = match_intensity_key.split('(')[-1].split(')')[0]
+                    return laser_id, float(intensity)  # Convert intensity to float
+    return None, None
+
+def extract_gain_value(description):
+    # Use a regular expression to find the "Multiplication Gain" value
+    match = re.search(r'Multiplication Gain: (\d+)&#', description)
+    if match:
+        # Return the value found, converting it to an integer
+        return int(match.group(1))
+    else:
+        # Return None if no match is found
+        return None
+
+
+def aggregate_metadata_info(metadata_dict):
+    """
+    Aggregate metadata info from all files into a single DataFrame with unique values listed,
+    converting lists of values to a comma-separated string to ensure compatibility.
+    """
+    metadata_info = {}
+
+    for file_metadata in metadata_dict.values():
+        for data in file_metadata:
+            value = data['value']
+            if value != 'N/A':  # Skip 'N/A' values
+                if data['id'] not in metadata_info:
+                    metadata_info[data['id']] = {'count': 1, 'values': {value}}
+                else:
+                    metadata_info[data['id']]['count'] += 1
+                    metadata_info[data['id']]['values'].add(value)
+
+    # Prepare data for DataFrame
+    data_for_df = []
+    for id, info in metadata_info.items():
+        data_for_df.append({
+            'ID': id, 
+            'Count': info['count'], 
+            'Unique Values': ', '.join(map(str, sorted(info['values'])))
+        })
+
+    # Create DataFrame from the prepared data
+    df = pd.DataFrame(data_for_df)
+    df.set_index('ID', inplace=True)
+
+    return df
+
+
+def process_tiff_metadata(file_path):
+    """
+    Process a TIFF file to extract, format, and return specific metadata as a list of dictionaries.
+
+    Args:
+    file_path (str): Path to the TIFF file.
+
+    Returns:
+    list of dicts: A list containing dictionaries of formatted metadata.
+    """
+    # Helper function to safely read metadata with a default
+    def safe_read_metadata(file, root_tag, id_filter):
+        data = read_tiff_metadata(file, root_tag=root_tag, id_filter=id_filter)
+        return data['value'] if data and 'value' in data else None
+
+    # Extract specific metadata entries
+    date = safe_read_metadata(file_path, 'prop', 'acquisition-time-local')
+    pixel_size_x = safe_read_metadata(file_path, 'prop', 'pixel-size-x')
+    pixel_size_y = safe_read_metadata(file_path, 'prop', 'pixel-size-y')
+    dimension = f"{pixel_size_x} x {pixel_size_y}" if pixel_size_x and pixel_size_y else None
+
+    spatial_calibration_x = safe_read_metadata(file_path, 'prop', 'spatial-calibration-x')
+    spatial_calibration_y = safe_read_metadata(file_path, 'prop', 'spatial-calibration-y')
+    spatial_calibration_unit = safe_read_metadata(file_path, 'prop', 'spatial-calibration-units')
+
+    description = safe_read_metadata(file_path, 'prop', 'Description')
+    gain = extract_gain_value(description) if description else None
+
+    lasers = read_tiff_metadata(file_path, 'custom-prop', 'ALC Laser')
+    laser_id, intensity = get_open_laser_intensity(lasers) if lasers else (None, None)
+
+    # Format metadata into a dictionary
+    tif_metadata = [
+        {'root_tag': 'tif-pulsestorm', 'id': 'Date', 'type': 'string', 'value': date.split(' ')[0] if date else None},
+        {'root_tag': 'tif-pulsestorm', 'id': 'Pixel Dimensions', 'type': 'string', 'value': dimension},
+        {'root_tag': 'tif-pulsestorm', 'id': 'Laser', 'type': 'string', 'value': laser_id},
+        {'root_tag': 'tif-pulsestorm', 'id': 'Laser Intensity', 'type': 'float', 'value': intensity},
+        {'root_tag': 'tif-pulsestorm', 'id': 'Gain', 'type': 'float', 'value': gain},
+        {'root_tag': 'tif-pulsestorm', 'id': 'Pixel Size X', 'type': 'float', 'value': spatial_calibration_x},
+        {'root_tag': 'tif-pulsestorm', 'id': 'Pixel Size Y', 'type': 'float', 'value': spatial_calibration_y},
+        {'root_tag': 'tif-pulsestorm', 'id': 'Pixel Size Units', 'type': 'string', 'value': spatial_calibration_unit}
+    ]
+
+    return [entry for entry in tif_metadata if entry['value'] is not None]
 
