@@ -4,6 +4,7 @@ from UI.filament_dashboard_ui import run_filament_dashboard_ui
 from UI.filament_preprocessing_ui import run_filament_preprocessing_ui
 from UI.sidebar import setup_sidebar
 from UI.storm_dashboard_ui import run_storm_dashboard_ui
+from UI.storm_preprocessing_ui import run_storm_preprocessing_ui
 from UI.welcome_ui import show_welcome
 
 st.set_page_config(page_title="PulseSTORM", page_icon=":microscope:", layout="wide")
@@ -30,7 +31,7 @@ def display_content():
                     run_filament_dashboard_ui(st.session_state.soac_database_folder)
             elif section == "STORM Analysis":
                 if operation == "Preprocessing":
-                    st.write("Preprocessing STORM Analysis")
+                    run_storm_preprocessing_ui(st.session_state.storm_database_folder)
                 elif operation == "Processing":
                     st.write("Processing STORM Analysis")
                 elif operation == "Batch":
