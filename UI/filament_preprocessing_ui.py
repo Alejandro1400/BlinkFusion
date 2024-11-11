@@ -61,6 +61,10 @@ def run_filament_preprocessing_ui(soac_folder):
     if 'show_add_form' not in st.session_state:
         st.session_state.show_add_form = False
 
+    # Ensure reload_metadata state is initialized
+    if 'reload_metadata' not in st.session_state:
+        st.session_state.reload_metadata = False
+
     upload_path = st.text_input("Enter the path to the folder or file you wish to upload.")
 
     with st.expander("Tif File Metadata"):
@@ -123,6 +127,10 @@ def run_filament_preprocessing_ui(soac_folder):
 
                     # Attempt to get the currently selected value or default to the first available value
                     current_selection = st.session_state.metadata_values.get(metadata_id, [(current_values[0], entries[0][1])])[0][0]
+                    
+                    if current_selection not in current_values:
+                        current_values.insert(0, current_selection)
+
                     selected_value = st.selectbox(f"{metadata_id} ({entries[0][1]})", current_values, index=current_values.index(current_selection), key=f"{metadata_id}_value_select")
                   
 
@@ -131,6 +139,7 @@ def run_filament_preprocessing_ui(soac_folder):
                         if new_value:
                             # Directly update or append the new value tuple to session state
                             st.session_state.metadata_values[metadata_id] = [(new_value, entries[0][1])]
+                            db_metadata[metadata_id].append((new_value, entries[0][1]))
                     elif selected_value == None:
                         st.session_state.metadata_values[metadata_id] = [(None, entries[0][1])]
                     else:
@@ -211,13 +220,12 @@ def run_filament_preprocessing_ui(soac_folder):
                 selected_metadata = [key for key in st.session_state.selected_for_folder]
                 st.write(f"Metadata hierarchy: {selected_metadata}")
 
+                # Remove 'Folder' key from each dictionary in the list
+                for entry in formatted_metadata:
+                    entry.pop('Folder')
+
                 # Process each file and their associated metadata
                 for file, metadata in all_files_metadata.items():
-
-
-                    # Remove 'Folder' key from each dictionary in the list
-                    for entry in formatted_metadata:
-                        entry.pop('Folder')
 
                     # Combined metadata by merging corresponding dictionaries
                     combined_metadata = formatted_metadata + metadata
@@ -242,6 +250,8 @@ def run_filament_preprocessing_ui(soac_folder):
                     st.write(f"File: {file} is being uploaded to: {path_directory}")
 
                     append_metadata_tags(file, path_directory, combined_metadata)
+
+                    db_metadata = load_filament_metadata(soac_folder)
             else:
                 st.write("No files have been processed for upload.")
 

@@ -18,8 +18,6 @@ def load_storm_metadata(storm_folder):
 
     database_metadata = {}
 
-    print(f"len(valid_folders): {len(valid_folders)}")
-
     for folder in valid_folders:
       
         # Find tif files in folder
@@ -121,6 +119,10 @@ def run_storm_preprocessing_ui(storm_folder):
 
                     # Attempt to get the currently selected value or default to the first available value
                     current_selection = st.session_state.metadata_values.get(metadata_id, [(current_values[0], entries[0][1])])[0][0]
+
+                    if current_selection not in current_values:
+                        current_values.insert(0, current_selection)
+
                     selected_value = st.selectbox(f"{metadata_id} ({entries[0][1]})", current_values, index=current_values.index(current_selection), key=f"{metadata_id}_value_select")
                   
 
@@ -163,6 +165,8 @@ def run_storm_preprocessing_ui(storm_folder):
                 elif new_id and new_value:
                     # Update db_metadata and session state only if validations pass
                     if new_id not in st.session_state.metadata_values:
+                        # Assign type to the value
+
                         st.session_state.metadata_values[new_id] = [(new_value, new_type)]
                         if new_folder:
                             st.session_state.selected_for_folder.append(new_id)
@@ -210,13 +214,12 @@ def run_storm_preprocessing_ui(storm_folder):
                 selected_metadata = [key for key in st.session_state.selected_for_folder]
                 st.write(f"Metadata hierarchy: {selected_metadata}")
 
+                # Remove 'Folder' key from each dictionary in the list
+                for entry in formatted_metadata:
+                    entry.pop('Folder')
+
                 # Process each file and their associated metadata
                 for file, metadata in all_files_metadata.items():
-
-
-                    # Remove 'Folder' key from each dictionary in the list
-                    for entry in formatted_metadata:
-                        entry.pop('Folder')
 
                     # Combined metadata by merging corresponding dictionaries
                     combined_metadata = formatted_metadata + metadata

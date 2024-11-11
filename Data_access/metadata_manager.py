@@ -5,6 +5,7 @@ import czifile
 import pandas as pd
 import tifffile
 import xml.etree.ElementTree as ET
+import streamlit as st
 
 
 def read_tiff_metadata(tif_file_path, root_tag='prop', id_filter=None):
@@ -26,16 +27,22 @@ def read_tiff_metadata(tif_file_path, root_tag='prop', id_filter=None):
     # Define a regex to extract tag attributes correctly handling spaces
     attr_pattern = re.compile(r'(\w+)="([^"]*)"')
 
+    print(tif_file_path)
+
     # Process each line in the image description
     for line in image_description.split('\n'):
         if f'<{root_tag}' in line:
             # Parse the attributes using regex
+            print(line)
             attrs = dict(attr_pattern.findall(line))
 
             if id_filter is None or attrs.get('id', '').startswith(id_filter):
+                print(attrs)
                 prop_id = attrs.get('id')
                 prop_type = attrs.get('type')
                 prop_value = attrs.get('value')
+
+                print(f"Found metadata: {prop_id} ({prop_type}): {prop_value}")
 
                 # Convert value to the appropriate type based on 'type' attribute
                 if prop_type == 'int':
@@ -78,11 +85,7 @@ def czi_2_tiff(czi_filepath, tif_folder, hierarchy_folders, tags):
     # Prepare new tags as a string to insert
     new_tags_str = ''
     for tag in tags:
-        # Check if value is a string to determine if it should be enclosed in quotes
-        if isinstance(tag["value"], str):
-            value_str = f'"{tag["value"]}"'  # Enclose string values in quotes
-        else:
-            value_str = str(tag["value"])  # Convert non-string values to string without quotes
+        value_str = f'"{tag["value"]}"' 
 
         # Format the new tag string
         new_tag = f'<{tag["root_tag"]} id="{tag["id"]}" type="{tag["type"]}" value={value_str}/>\n'
@@ -180,11 +183,7 @@ def append_metadata_tags(tif_file_path, new_tif_file_path, tags):
         # Prepare new tags as a string to insert
         new_tags_str = ''
         for tag in tags:
-            # Check if value is a string to determine if it should be enclosed in quotes
-            if isinstance(tag["value"], str):
-                value_str = f'"{tag["value"]}"'  # Enclose string values in quotes
-            else:
-                value_str = str(tag["value"])  # Convert non-string values to string without quotes
+            value_str = f'"{tag["value"]}"'
     
             # Format the new tag string
             new_tag = f'<{tag["root_tag"]} id="{tag["id"]}" type="{tag["type"]}" value={value_str}/>\n'
@@ -284,7 +283,7 @@ def aggregate_metadata_info(metadata_dict):
 
     return df
 
-
+@st.cache_data
 def process_tiff_metadata(file_path):
     """
     Process a TIFF file to extract, format, and return specific metadata as a list of dictionaries.
