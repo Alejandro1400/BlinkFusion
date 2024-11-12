@@ -242,13 +242,12 @@ def run_filament_preprocessing_ui(soac_folder):
                                             
                     
                     # Create the folder path based on selected hierarchy
-                    print(f"Folder Path: {folder_path}")
-                    path_directory = os.path.join(soac_folder, *folder_path)
-                    print(f"Path Directory: {path_directory}")
+                    path_directory = os.path.join(soac_folder, *folder_path, os.path.basename(file))
+                    
                     # Add filename to the path
                     path_directory = os.path.join(path_directory, os.path.basename(file))
                     
-                    st.write(f"File: {file} is being uploaded to: {path_directory}")
+                    st.write(f"File: {os.path.basename(file)} is being uploaded to: {path_directory}")
 
                     append_metadata_tags(file, path_directory, combined_metadata)
 

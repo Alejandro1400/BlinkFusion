@@ -6,7 +6,7 @@ from Data_access.file_explorer import find_items, find_valid_folders
 from Data_access.metadata_manager import aggregate_metadata_info, czi_2_tiff, extract_values_from_title, read_tiff_metadata
 
 #@st.cache_data
-def load_storm_metadata(storm_folder):
+def load_storm_metadata(storm_folder, reload_trigger):
 
     #try: 
     valid_folders = find_valid_folders(
@@ -44,11 +44,11 @@ def load_storm_metadata(storm_folder):
 
     return database_metadata
 
-
+# Function to increment the reload trigger
+def reload_metadata():
+    st.session_state.reload_trigger += 1
 
 def run_storm_preprocessing_ui(storm_folder):
-    
-    db_metadata = load_storm_metadata(storm_folder)
 
     # Initialize the session state variable if it does not already exist
     if 'selected_for_folder' not in st.session_state:
@@ -60,6 +60,12 @@ def run_storm_preprocessing_ui(storm_folder):
 
     if 'show_add_form' not in st.session_state:
         st.session_state.show_add_form = False
+
+    if 'reload_trigger' not in st.session_state:
+        st.session_state.reload_trigger = 0
+
+    # Load metadata from the database
+    db_metadata = load_storm_metadata(storm_folder, st.session_state.reload_trigger)
 
     upload_path = st.text_input("Enter the path to the folder or file you wish to upload.")
 
@@ -227,6 +233,8 @@ def run_storm_preprocessing_ui(storm_folder):
                     st.write(f"File: {file} is being uploaded to: {storm_folder}")
 
                     czi_2_tiff(file, storm_folder, st.session_state.selected_for_folder, combined_metadata)
+
+                    reload_metadata()
             else:
                 st.write("No files have been processed for upload.")
 
