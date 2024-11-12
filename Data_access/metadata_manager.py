@@ -80,6 +80,8 @@ def czi_2_tiff(czi_filepath, tif_folder, hierarchy_folders, tags):
             if folder in data['id']:
                 folder_path.append(data['value'])
 
+    folder_path.append(os.path.basename(czi_filepath).replace('.czi', ''))
+
     tif_filepath = os.path.join(tif_folder, *folder_path, os.path.basename(czi_filepath).replace('.czi', '.tif'))
 
     # Prepare new tags as a string to insert
