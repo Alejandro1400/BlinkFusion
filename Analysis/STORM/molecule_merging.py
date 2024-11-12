@@ -1,8 +1,9 @@
+import time
 import numpy as np
 import pandas as pd
-import tkinter as tk
-from tkinter import filedialog
 from scipy.spatial import KDTree
+
+from Analysis.STORM.track_storm import merge_localizations
 
 def create_tracking_events(locs, file_type):
     """
@@ -57,81 +58,8 @@ def calculate_distance(track, localization):
                    (track['Y'] - localization['Y'])**2 + 
                    (track['Z'] - localization['Z'])**2)
 
-
-def recursive_frame_check(track_index, frame, tracking_events, localizations, max_distance):
-    """Recursively check and merge localizations at a given frame, adjust min/max frames and gaps if needed.
-       Returns updates for applying after recursion completes."""
-    updates = []
-    track = tracking_events.iloc[track_index]
-    frame_localizations = localizations[(localizations['FRAME'] == frame) & (localizations['TRACK_ID'].isnull())]
-    
-    min_distance = float('inf')
-    selected_loc = None
-
-    # Find the closest localization in this specific frame
-    for j, loc in frame_localizations.iterrows():
-        distance = calculate_distance(track, loc)
-        if distance <= max_distance and distance < min_distance:
-            min_distance = distance
-            selected_loc = j
-
-    if selected_loc is not None:
-        updates.append((frame, selected_loc, 'assigned', track['TRACK_ID']))
-
-        # Determine if the frame is a boundary or gap and update accordingly
-        if frame == track['min_frame'] - 1:
-            new_updates = recursive_frame_check(track_index, frame - 1, tracking_events, localizations, max_distance)
-            updates.extend(new_updates)
-            updates.append((frame, selected_loc, 'min', track['TRACK_ID']))
-        elif frame == track['max_frame'] + 1:
-            new_updates = recursive_frame_check(track_index, frame + 1, tracking_events, localizations, max_distance)
-            updates.extend(new_updates)
-            updates.append((frame, selected_loc, 'max', track['TRACK_ID']))
-        if frame in track['gaps']:
-            updates.append((frame, selected_loc, 'gap', track['TRACK_ID']))
-
-    return updates
-
-
-def merge_non_tracking_events(localizations, tracking_events, max_distance=0.1):
-    """
-    Merge tracking events with localizations based on proximity and update tracking details recursively.
-    
-    Parameters:
-    - localizations (pd.DataFrame): DataFrame containing localization data.
-    - tracking_events (pd.DataFrame): DataFrame containing tracking event data.
-    - max_distance (float): Maximum distance to consider for merging events.
-    
-    Returns:
-    - pd.DataFrame: Updated tracking events.
-    - pd.DataFrame: Updated localizations.
-    """
-    all_updates = []
-
-    for i, track in tracking_events.iterrows():
-        potential_frames = set(track['gaps'] + [track['min_frame'] - 1, track['max_frame'] + 1])
-        
-        for frame in potential_frames:
-            updates = recursive_frame_check(i, frame, tracking_events, localizations, max_distance)
-            all_updates.extend(updates)
-
-    # Apply updates to localizations and adjust tracking_events
-    for update in all_updates:
-        frame, loc_index, update_type, track_id = update
-        if update_type == 'assigned':
-            localizations.at[loc_index, 'TRACK_ID'] = track_id
-        if update_type in ['min', 'max']:
-            if update_type == 'min':
-                tracking_events.at[track_id, 'min_frame'] = frame
-            elif update_type == 'max':
-                tracking_events.at[track_id, 'max_frame'] = frame
-        if update_type == 'gap':
-            tracking_events.at[track_id, 'gaps'].remove(frame)
-
-    return tracking_events, localizations
-
                 
-def merge_tracking_events(tracking_events, max_distance=0.1):
+def merge_tracking_events(tracking_events, max_distance=100):
     """
     Cluster tracking events that are close to each other within a maximum distance.
     
@@ -320,9 +248,6 @@ def bleaching_identification(molecules, tracking_events):
     # Map END_TRACK to END_FRAME from tracking events
     track_to_end_frame = tracking_events.set_index('TRACK_ID')['END_FRAME'].to_dict()
 
-    # Initialize the BLEACHED column to False
-    molecules['BLEACHED'] = False
-
     # Compare each molecule's END_FRAME to the max_off_time criterion
     for index, molecule in molecules.iterrows():
         # Fetch the END_FRAME for the corresponding END_TRACK of the molecule
@@ -372,13 +297,16 @@ def prepare_columns(df, file_type):
 def process_tracks(df, file_type):
     """ Process the entire file and merge tracking events. """
 
-    raw_localizations = prepare_columns(df, file_type)
+    raw_localizations = None
+    tracking_events = None
 
-    # Create tracking events DataFrame
-    tracking_events = create_tracking_events(raw_localizations, file_type)
-
-    # Merge non-tracking events
-    #tracking_events, localizations = merge_non_tracking_events(localizations, tracking_events)
+    if file_type == 'trackmate':
+        # Prepare the columns
+        raw_localizations = prepare_columns(df, file_type)
+        # Create tracking events DataFrame
+        tracking_events = create_tracking_events(raw_localizations, file_type)
+    elif file_type == 'thunderstorm':
+        raw_localizations, tracking_events = merge_localizations(df, time.time())
 
     # Merge molecules
     merged_tracking_events = merge_tracking_events(tracking_events)
@@ -393,7 +321,7 @@ def process_tracks(df, file_type):
     molecules = create_molecules(blink_tracking_events)
     
     # Determine photobleaching
-    molecules = bleaching_identification(molecules, blink_tracking_events)
+    #molecules = bleaching_identification(molecules, blink_tracking_events)
 
     return localizations, blink_tracking_events, molecules
 
