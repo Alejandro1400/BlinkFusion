@@ -24,7 +24,7 @@ def load_storm_data(pulseSTORM_folder):
             # Find all valid folders (folders that contain the required files)
             valid_folders = find_valid_folders(
                 pulseSTORM_folder,
-                required_files={'trackmate_locs_blink_stats.csv', 'trackmate_track_blink_stats.csv', 'trackmate_mol_blink_stats.csv'}
+                required_files={'locs_blink_stats.csv', 'track_blink_stats.csv', 'mol_blink_stats.csv'}
             )
 
             print(valid_folders)
@@ -36,21 +36,21 @@ def load_storm_data(pulseSTORM_folder):
             for folder in valid_folders:
                 locs = find_items(
                     base_directory=folder, 
-                    item='trackmate_locs_blink_stats.csv', 
+                    item='locs_blink_stats.csv', 
                     is_folder=False, 
                     search_by_extension=True
                 )
 
                 track = find_items(
                     base_directory=folder,
-                    item='trackmate_track_blink_stats.csv',
+                    item='track_blink_stats.csv',
                     is_folder=False,
                     search_by_extension=True
                 )
 
                 mol = find_items(
                     base_directory=folder,
-                    item='trackmate_mol_blink_stats.csv',
+                    item='mol_blink_stats.csv',
                     is_folder=False,
                     search_by_extension=True
                 )
