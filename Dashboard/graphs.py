@@ -5,6 +5,7 @@ import numpy as np
 import seaborn as sns
 import plotly.express as px
 import plotly.graph_objects as go
+import streamlit as st
 
 from Dashboard.Radar import ComplexRadar
 
@@ -237,7 +238,7 @@ def create_radar_chart(df, id_column='Sample'):
     return fig
 
 
-def plot_time_series_interactive(duty_cycles, survival_fraction):
+def plot_time_series_interactive(duty_cycles, survival_fraction, qe_start, qe_end, qe_dc, qe_sf):
     # Create figure with secondary y-axis
     fig = go.Figure()
 
@@ -250,10 +251,37 @@ def plot_time_series_interactive(duty_cycles, survival_fraction):
         go.Scatter(x=survival_fraction.index, y=survival_fraction, name='Survival Fraction', mode='lines', line=dict(color='blue', dash='dot'), yaxis='y2')
     )
 
+    # Add a shaded area (transparent rectangle) from qe_start to qe_end
+    fig.add_shape(
+        type="rect",
+        x0=qe_start,
+        x1=qe_end,
+        y0=0,
+        y1=1,  # This is relative to the y-axis range of 'y' (Duty Cycle)
+        yref="paper",  # Uses the full vertical range of the plot
+        fillcolor="lightgray",
+        opacity=0.5,
+        layer="below",
+        line_width=0,
+    )
+
+    # Add annotation for Duty Cycle and Survival Fraction in the middle of the shaded area
+    midpoint_x = (qe_start + qe_end) / 2
+    fig.add_annotation(
+        x=midpoint_x,
+        y=0.9,  # Position near the top of the plot for visibility
+        yref="paper",
+        text=f"Duty Cycle: {qe_dc:.5f}<br>Survival Fraction: {qe_sf*100:.1f}%",  # Duty Cycle to 5 decimals, Survival Fraction as percentage with 1 decimal
+        showarrow=False,
+        font=dict(size=12, color="black"),
+        align="center",
+        opacity=0.8
+    )
+
     # Create axis objects
     fig.update_layout(
         xaxis=dict(title='Time (s)', showgrid=False, titlefont=dict(color='black'), tickfont=dict(color='black')),
-        yaxis=dict(title='Duty Cycle', titlefont=dict(color='black'), tickfont=dict(color='red'), range=[0, max(duty_cycles)*1.1], showgrid=False),
+        yaxis=dict(title='Duty Cycle', titlefont=dict(color='black'), tickfont=dict(color='red'), range=[0, max(duty_cycles) * 1.1], showgrid=False),
         yaxis2=dict(title='Survival Fraction', titlefont=dict(color='black'), tickfont=dict(color='blue'), overlaying='y', side='right', range=[0, 1], showgrid=False),
         title='Duty Cycle and Survival Fraction Over Time'
     )
@@ -290,3 +318,70 @@ def plot_intensity_vs_frame(plot_data):
     )
 
     return fig
+
+def remove_outliers_upper(df, column):
+    """
+    Remove outliers based on the IQR method.
+    """
+    Q1 = df[column].quantile(0.30)
+    Q3 = df[column].quantile(0.90)
+    IQR = Q3 - Q1
+    upper_bound = Q3 + 1.5 * IQR
+    
+    # Filtering the data
+    filtered_df = df[df[column] <= upper_bound]
+    return filtered_df
+
+def plot_histograms(duty_cycle, photons, switching_cycles, track_intensity_within_range):
+    st.title("Frequency Histograms for Molecule Metrics")
+
+    # Remove Outliers based on IQ Range on the upper bound of the time series only
+    #duty_cycle = remove_outliers_upper(duty_cycle, 'Duty Cycle')
+    #photons = remove_outliers_upper(photons, 'Photons')
+    #switching_cycles = remove_outliers_upper(switching_cycles, 'Switching Cycles')
+    #track_intensity_within_range = remove_outliers_upper(track_intensity_within_range, 'Intensity')
+
+    # Duty Cycle Histogram with Logarithmic y-axis
+    st.subheader("Duty Cycle Histogram")
+    fig, ax = plt.subplots()
+    ax.hist(duty_cycle, bins=40, color='skyblue', edgecolor='black')
+    ax.set_title('Duty Cycle per Molecule')
+    ax.set_xlabel('Duty Cycle')
+    ax.set_ylabel('Frequency')
+    ax.set_yscale('log')  # Set y-axis to log scale
+    st.pyplot(fig)  # Display Matplotlib figure in Streamlit
+
+    # Switching Cycles Histogram with Logarithmic y-axis
+    st.subheader("Switching Cycles Histogram")
+    fig, ax = plt.subplots()
+    ax.hist(switching_cycles, bins=40, color='lightgreen', edgecolor='black')
+    ax.set_title('Switching Cycles per Molecule')
+    ax.set_xlabel('Switching Cycles')
+    ax.set_ylabel('Frequency')
+    ax.set_yscale('log')  # Set y-axis to log scale
+    st.pyplot(fig)
+
+    # Convert to x10^3 for better readability the track intensity within range
+    track_intensity_within_range = [x/1000 for x in track_intensity_within_range]
+
+    # Track Intensity Within Range Histogram with Logarithmic x and y-axis
+    st.subheader("Photons per Track Histogram")
+    fig, ax = plt.subplots()
+    ax.hist(track_intensity_within_range, bins=40, color='lightpink', edgecolor='black')
+    ax.set_title('Intensity per Switching Cycle')
+    ax.set_xlabel('Photons (x10^3)')
+    ax.set_ylabel('Frequency')
+    ax.set_yscale('log')  # Set y-axis to log scale for better visibility of low frequencies
+    st.pyplot(fig)
+
+    # Convert to x10^3 for better readability the photons
+    photons = [x/1000 for x in photons]
+    # photons per track per molecule histogram
+    st.subheader("Mean Photons per SC Histogram")
+    fig, ax = plt.subplots()
+    ax.hist(photons, bins=40, color='lightcoral', edgecolor='black')
+    ax.set_title('Mean Photons SC per Molecule')
+    ax.set_xlabel('Photons (x10^3)')    
+    ax.set_ylabel('Frequency')
+    ax.set_yscale('log')  # Set y-axis to log scale
+    st.pyplot(fig)

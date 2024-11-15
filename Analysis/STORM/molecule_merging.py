@@ -166,6 +166,14 @@ def update_merged_locs(tracking_events, localizations):
                     tracking_events.at[track_ini.index[0], 'GAPS'] = list(gaps_ini)
                     tracking_events.at[track_ini.index[0], 'END_FRAME'] = max(track_ini['END_FRAME'].values[0], track_fin['END_FRAME'].values[0])
                     tracking_events.at[track_ini.index[0], 'START_FRAME'] = min(track_ini['START_FRAME'].values[0], track_fin['START_FRAME'].values[0])
+
+                    # Check if tracking events dataframe has INTENSITY, OFFSET, BKGSTD, UNCERTAINTY columns
+                    if 'INTENSITY' in tracking_events.columns and 'OFFSET' in tracking_events.columns and 'BKGSTD' in tracking_events.columns and 'UNCERTAINTY' in tracking_events.columns:
+                        tracking_events.at[track_ini.index[0], 'INTENSITY'] += track_fin['INTENSITY'].values[0]
+                        # For OFFSET calculate the average
+                        tracking_events.at[track_ini.index[0], 'OFFSET'] = (track_ini['OFFSET'].values[0] + track_fin['OFFSET'].values[0]) / 2
+                        tracking_events.at[track_ini.index[0], 'BKGSTD'] += track_fin['BKGSTD'].values[0]
+                        tracking_events.at[track_ini.index[0], 'UNCERTAINTY'] = (track_ini['UNCERTAINTY'].values[0] + track_fin['UNCERTAINTY'].values[0]) / 2
                 else:
                     break
 
@@ -178,7 +186,6 @@ def update_merged_locs(tracking_events, localizations):
     tracking_events = tracking_events[~tracking_events['TRACK_ID'].isin(track_changes.keys())]
 
     return localizations, tracking_events
-
 
 
 def track_blinking_times(tracking_events):

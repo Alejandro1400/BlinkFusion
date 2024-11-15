@@ -10,39 +10,37 @@ import streamlit as st
 
 def read_tiff_metadata(tif_file_path, root_tag='prop', id_filter=None):
     """
-    Read specific metadata from a TIFF file's ImageDescription as a plain string based on given root tag and optional ID filter.
+    Read specific metadata from a TIFF file's ImageDescription as a plain string based on given root tags and optional ID filter.
     
     Args:
     tif_file_path (str): Path to the TIFF file.
-    root_tag (str): The XML root tag to search for (e.g., 'prop', 'custom-prop').
+    root_tags (Union[str, list]): The XML root tag(s) to search for (e.g., 'prop', ['custom-prop', 'default-prop']).
     id_filter (str, optional): Specific ID to search for within the root tags.
 
     Returns:
     dict: Dictionary of found metadata values corresponding to specified IDs.
     """
+    # Ensure root_tags is a list even if a single string is provided
+    if isinstance(root_tag, str):
+        root_tag = [root_tag]
+
     with tifffile.TiffFile(tif_file_path) as tif:
         image_description = tif.pages[0].tags['ImageDescription'].value
 
     found_metadata = []
-    # Define a regex to extract tag attributes correctly handling spaces
     attr_pattern = re.compile(r'(\w+)="([^"]*)"')
-
-    print(tif_file_path)
 
     # Process each line in the image description
     for line in image_description.split('\n'):
-        if f'<{root_tag}' in line:
+        # Check if the line contains any of the specified root tags
+        if any(f'<{tag}' in line for tag in root_tag):
             # Parse the attributes using regex
-            print(line)
             attrs = dict(attr_pattern.findall(line))
 
             if id_filter is None or attrs.get('id', '').startswith(id_filter):
-                print(attrs)
                 prop_id = attrs.get('id')
                 prop_type = attrs.get('type')
                 prop_value = attrs.get('value')
-
-                print(f"Found metadata: {prop_id} ({prop_type}): {prop_value}")
 
                 # Convert value to the appropriate type based on 'type' attribute
                 if prop_type == 'int':
@@ -55,6 +53,7 @@ def read_tiff_metadata(tif_file_path, root_tag='prop', id_filter=None):
                 metadata = {'id': prop_id, 'type': prop_type, 'value': prop_value}
                 found_metadata.append(metadata)
 
+                # If a specific ID filter is matched, return immediately
                 if id_filter and prop_id == id_filter:
                     return metadata
 
@@ -96,8 +95,6 @@ def czi_2_tiff(czi_filepath, tif_folder, hierarchy_folders, tags):
     image_desc_fin = '</MetaData>\n'
 
     updated_metadata = image_desc + czi_metadata + new_tags_str + image_desc_fin
-
-    print(updated_metadata)
 
     # Check if the folders for the new file path exist, and create them if not
     new_folder = os.path.dirname(tif_filepath)

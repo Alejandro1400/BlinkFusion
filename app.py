@@ -31,7 +31,8 @@ def display_content():
                     run_filament_dashboard_ui(st.session_state.soac_database_folder)
             elif section == "STORM Analysis":
                 if operation == "Preprocessing":
-                    run_storm_preprocessing_ui(st.session_state.storm_database_folder)
+                    #run_storm_preprocessing_ui(st.session_state.storm_database_folder)
+                    print("Preprocessing STORM Analysis")
                 elif operation == "Processing":
                     st.write("Processing STORM Analysis")
                 elif operation == "Batch":
