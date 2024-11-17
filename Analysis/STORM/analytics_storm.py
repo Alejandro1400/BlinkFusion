@@ -1,72 +1,121 @@
+import math
+import numpy as np
 import pandas as pd
 import streamlit as st
 
-def obtain_molecules_metrics(molecules, tracks, time_series, exposure_time):
 
-    duty_cycles = time_series['Duty Cycle']
-    duty_cycles = pd.Series(duty_cycles)
+import pandas as pd
 
-    frame_rate = 1000/exposure_time
+def obtain_molecules_metrics(tracks, time_series, metadata):
+    results = []
+    
+    for identifier in metadata['IDENTIFIER'].unique():
+        tracks_df = tracks[tracks['IDENTIFIER'] == identifier]
+        time_series_df = time_series[time_series['IDENTIFIER'] == identifier]
 
-    quasi_equilibrium = calculate_quasi_equilibrium(duty_cycles)
-    quasi_equilibrium_data = time_series.loc[quasi_equilibrium]
+        if time_series_df.empty:
+            continue
 
-    quasi_equilibrium_tracks = tracks[(tracks['START_FRAME'] <= int(quasi_equilibrium[-1]*frame_rate)) & (tracks['END_FRAME'] >= int(quasi_equilibrium[0]*frame_rate))]
-    print(quasi_equilibrium_tracks)
+        duty_cycles = time_series_df['Duty Cycle']
+        duty_cycles = pd.Series(duty_cycles)
 
-    grouped = quasi_equilibrium_tracks.groupby('MOLECULE_ID')['INTENSITY']
-    intensity_sums = grouped.sum()
-    switching_cycles = grouped.count()
-    mean_intensity = intensity_sums/switching_cycles
-    # Calculate mean of these intensity sums
-    qe_photons = mean_intensity.mean() if not mean_intensity.empty else 0
+        exposure_time = metadata[metadata['IDENTIFIER'] == identifier]['EXPOSURE'].iloc[0]
+        frame_rate = 1000 / exposure_time
 
-    qe_dc_population = (quasi_equilibrium_data['Population Mol']).sum()
-    qe_duty_cycle = (quasi_equilibrium_data['Duty Cycle'] * quasi_equilibrium_data['Population Mol']).sum() / qe_dc_population
-    print(f"Duty Cycle: {qe_duty_cycle}")
-    print(quasi_equilibrium_data['Survival Fraction'])
-    qe_survival_fraction = quasi_equilibrium_data['Survival Fraction'].iloc[-1]
-    print(f"Survival Fraction: {qe_survival_fraction}")
-    qe_act_population = quasi_equilibrium_tracks['MOLECULE_ID'].nunique()
-    print(f"Active Population: {qe_act_population}")
-    qe_switching_cycles = len(quasi_equilibrium_tracks)/qe_act_population
-    print(f"Switching Cycles: {qe_switching_cycles}")
-    #qe_photons = quasi_equilibrium_tracks['INTENSITY'].sum()/len(quasi_equilibrium_tracks)
-    print(f"Photons: {qe_photons}")
-    qe_uncertainty = quasi_equilibrium_tracks['UNCERTAINTY'].sum()/len(quasi_equilibrium_tracks)
-    print(f"Uncertainty: {qe_uncertainty}")
-    qe_on_time = quasi_equilibrium_tracks['ON_TIME'].sum()/len(quasi_equilibrium_tracks)
-    print(f"On Time: {qe_on_time}")
+        population = len(tracks_df['MOLECULE_ID'].unique()) if not tracks_df.empty else 0
+        intensity_mol = tracks_df['INTENSITY'].sum() / population if population > 0 else 0
+        switching_cycles_mol = len(tracks_df) / population if population > 0 else 0
+        intensity_sc = tracks_df['INTENSITY'].sum() / len(tracks_df) if len(tracks_df) > 0 else 0
+        uncertainty = tracks_df['UNCERTAINTY'].sum() / len(tracks_df) if len(tracks_df) > 0 else 0
+        on_time = (tracks_df['ON_TIME'].sum() / len(tracks_df)) / frame_rate if len(tracks_df) > 0 else 0
 
-    # Calculate number of molecules
-    num_molecules = molecules['MOLECULE_ID'].nunique()
+        quasi_equilibrium = calculate_quasi_equilibrium(duty_cycles)
+        quasi_equilibrium_data = time_series_df.loc[quasi_equilibrium]
 
-    # Calculate mean switching cycles per molecule
-    mean_switching_cycles = molecules['#_TRACKS'].mean()
+        quasi_equilibrium_tracks = tracks_df[
+            (tracks_df['START_FRAME'] <= int(quasi_equilibrium[-1] * frame_rate)) & 
+            (tracks_df['END_FRAME'] >= int(quasi_equilibrium[0] * frame_rate))
+        ]
 
-    # Calculate mean on time per molecule
-    mean_on_time = molecules['TOTAL_ON_TIME'].mean()
+        grouped = quasi_equilibrium_tracks.groupby('MOLECULE_ID')['INTENSITY']
+        intensity_sums = grouped.sum()
+        switching_cycles = grouped.count()
 
-    # Create metrics dataframe
-    metrics = pd.DataFrame({
-        'Molecules': [num_molecules],
-        'Switching Cycles per mol': [mean_switching_cycles],
-        'On Time per SC': [mean_on_time],
-        'QE Duty Cycle': [qe_duty_cycle],
-        'QE Survival Fraction': [qe_survival_fraction],
-        'QE DC Population': [qe_dc_population],
-        'QE Active Population': [qe_act_population],
-        'QE Switching Cycles per mol': [qe_switching_cycles],
-        'QE Photons per SC': [qe_photons],
-        'QE Mean Uncertainty': [qe_uncertainty],
-        'QE On Time per SC': [qe_on_time],
-        'QE Start': [quasi_equilibrium[0]],
-        'QE End': [quasi_equilibrium[-1]]
-    })
+        qe_photons_mol = intensity_sums.mean() if not intensity_sums.empty else 0
+        mean_intensity = intensity_sums / switching_cycles
+        qe_photons = mean_intensity.mean() if not mean_intensity.empty else 0
 
-    print(metrics)
+        qe_dc_population = (quasi_equilibrium_data['Population Mol']).sum()
+        qe_duty_cycle = (quasi_equilibrium_data['Duty Cycle'] * quasi_equilibrium_data['Population Mol']).sum() / qe_dc_population
+        qe_survival_fraction = quasi_equilibrium_data['Survival Fraction'].iloc[-1] if not quasi_equilibrium_data.empty else 0
+        qe_act_population = quasi_equilibrium_tracks['MOLECULE_ID'].nunique()
+        qe_switching_cycles = len(quasi_equilibrium_tracks) / qe_act_population if qe_act_population > 0 else 0
+        qe_uncertainty = quasi_equilibrium_tracks['UNCERTAINTY'].sum() / len(quasi_equilibrium_tracks) if len(quasi_equilibrium_tracks) > 0 else 0
+        qe_on_time = (quasi_equilibrium_tracks['ON_TIME'].sum() / len(quasi_equilibrium_tracks))/frame_rate if len(quasi_equilibrium_tracks) > 0 else 0
 
-    return metrics, quasi_equilibrium_tracks
+        # Calculate Midway Survival Fraction
+        midpoint_index = len(time_series_df) // 2
+        midway_survival_fraction = time_series_df['Survival Fraction'].iloc[midpoint_index] if len(time_series_df) > 0 else 0
+
+        metrics_dict = {
+            'IDENTIFIER': identifier,
+            'Population Mol': population,
+            'QE DC Population': qe_dc_population,
+            'QE Active Population': qe_act_population,
+            'QE Duty Cycle': qe_duty_cycle,
+            'QE Survival Fraction': qe_survival_fraction,
+            'Mid Survival Fraction': midway_survival_fraction,
+            'Int. per Mol (Photons)': intensity_mol,
+            'Int. per SC (Photons)': intensity_sc,
+            'QE Int. per Mol (Photons)': qe_photons_mol,
+            'QE Int. per SC (Photons)': qe_photons,
+            'SC per Mol': switching_cycles_mol,
+            'QE SC per Mol': qe_switching_cycles,
+            'On Time per SC (s)': on_time,
+            'QE On Time per SC (s)': qe_on_time,
+            'Uncertainty (um)': uncertainty,
+            'QE Uncertainty (um)': qe_uncertainty,
+            'QE Period (s)': f"{math.ceil(quasi_equilibrium[0] / 10) * 10}-{math.ceil(quasi_equilibrium[-1] / 10) * 10}"
+        }
+        results.append(metrics_dict)
+
+    # Convert results list to DataFrame
+    results_df = pd.DataFrame(results)
+
+    return results_df
+
+
+def weighted_mean(data, weights):
+    """Calculate weighted mean for a Series with given weights."""
+    return (data * weights).sum() / weights.sum()
+
+def aggregate_metrics(grouped_df):
+    """Apply custom aggregation for each metric using weighted means where applicable."""
+    aggregation = {
+        'Population Mol': 'sum',
+        'QE DC Population': 'sum',
+        'QE Active Population': 'sum',
+        # Replace 'mean' with a custom function that calculates the weighted mean:
+        'QE Duty Cycle': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'QE DC Population']),
+        'QE Survival Fraction': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'QE DC Population']),
+        'Mid Survival Fraction': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'Population Mol']),
+        'Int. per Mol (Photons)': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'Population Mol']),
+        'Int. per SC (Photons)': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'Population Mol']),
+        'QE Int. per Mol (Photons)': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'QE DC Population']),
+        'QE Int. per SC (Photons)': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'QE Active Population']),
+        'SC per Mol': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'Population Mol']),
+        'QE SC per Mol': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'QE Active Population']),
+        'On Time per SC (s)': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'Population Mol']),
+        'QE On Time per SC (s)': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'QE Active Population']),
+        'Uncertainty (um)': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'Population Mol']),
+        'QE Uncertainty (um)': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'QE Active Population']),
+        'QE Period (s)': lambda x: list(x.unique()), # Collect unique periods
+        '# Images': 'count'
+    
+    }
+    return grouped_df.agg(aggregation)
+
+
 
 
 def calculate_quasi_equilibrium(duty_cycles):
@@ -79,8 +128,8 @@ def calculate_quasi_equilibrium(duty_cycles):
     min_index = 0
 
     # Iterate through the series, checking segments of four consecutive values
-    for i in range(len(duty_cycles) - 3):
-        current_segment = duty_cycles[i:i+4]
+    for i in range(len(duty_cycles) - 4):
+        current_segment = duty_cycles[i:i+5]
 
         # Check to ensure no duty cycle value is zero in the segment
         if all(current_segment > 0):
@@ -92,8 +141,7 @@ def calculate_quasi_equilibrium(duty_cycles):
                 min_score = segment_std
                 min_index = i
 
-    # Return the time indices of the 4 values that represent the quasi-equilibrium
-    quasi_equilibrium_values = duty_cycles.index[min_index:min_index+4].tolist()
+    quasi_equilibrium_values = duty_cycles.index[min_index:min_index+5].tolist()
 
     return quasi_equilibrium_values
 

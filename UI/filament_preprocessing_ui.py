@@ -49,8 +49,9 @@ def reload_metadata():
     st.session_state.reload_trigger += 1
 
 def run_filament_preprocessing_ui(soac_folder):
-    
-    db_metadata = load_filament_metadata(soac_folder, st.session_state.reload_trigger)
+
+    if 'reload_trigger' not in st.session_state:
+        st.session_state.reload_trigger = 0
 
     # Initialize the session state variable if it does not already exist
     if 'selected_for_folder' not in st.session_state:
@@ -63,8 +64,7 @@ def run_filament_preprocessing_ui(soac_folder):
     if 'show_add_form' not in st.session_state:
         st.session_state.show_add_form = False
 
-    if 'reload_trigger' not in st.session_state:
-        st.session_state.reload_trigger = 0
+    db_metadata = load_filament_metadata(soac_folder, st.session_state.reload_trigger)
 
     upload_path = st.text_input("Enter the path to the folder or file you wish to upload.")
 
