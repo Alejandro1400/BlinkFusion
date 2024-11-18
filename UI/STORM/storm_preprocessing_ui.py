@@ -19,12 +19,18 @@ def load_storm_metadata(storm_folder, reload_trigger):
     database_metadata = {}
 
     for folder in valid_folders:
+
+        print(f"Processing folder: {folder}")
       
         # Find tif files in folder
         tif_file = find_items(base_directory=folder, item='.tif', is_folder=False, check_multiple=False, search_by_extension=True)
 
+        print(f"Found tif file: {tif_file}")
+
         # Obtain metadata from the tif file
         metadata = read_tiff_metadata(tif_file, root_tag = 'pulsestorm')
+
+        print(f"Metadata: {metadata}")
 
 
         # Process each metadata item

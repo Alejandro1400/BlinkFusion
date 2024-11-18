@@ -238,17 +238,17 @@ def create_radar_chart(df, id_column='Sample'):
     return fig
 
 
-def plot_time_series_interactive(duty_cycles, survival_fraction, qe_start, qe_end, qe_dc, qe_sf):
+def plot_time_series_interactive(metric1_data, metric2_data, metric1_name, metric2_name, qe_start, qe_end, qe_dc, qe_sf):
     # Create figure with secondary y-axis
     fig = go.Figure()
 
     # Add traces
     fig.add_trace(
-        go.Scatter(x=duty_cycles.index, y=duty_cycles, name='Duty Cycle', mode='lines', line=dict(color='red'), yaxis='y')
+        go.Scatter(x=metric1_data.index, y=metric1_data, name=metric1_name, mode='lines', line=dict(color='red'), yaxis='y', showlegend=False)
     )
 
     fig.add_trace(
-        go.Scatter(x=survival_fraction.index, y=survival_fraction, name='Survival Fraction', mode='lines', line=dict(color='blue', dash='dot'), yaxis='y2')
+        go.Scatter(x=metric2_data.index, y=metric2_data, name=metric2_name, mode='lines', line=dict(color='blue', dash='dot'), yaxis='y2', showlegend=False)
     )
 
     # Add a shaded area (transparent rectangle) from qe_start to qe_end
@@ -257,21 +257,22 @@ def plot_time_series_interactive(duty_cycles, survival_fraction, qe_start, qe_en
         x0=qe_start,
         x1=qe_end,
         y0=0,
-        y1=1,  # This is relative to the y-axis range of 'y' (Duty Cycle)
+        y1=1,  # This is relative to the y-axis range of 'y' (Metric 1)
         yref="paper",  # Uses the full vertical range of the plot
         fillcolor="lightgray",
         opacity=0.5,
         layer="below",
         line_width=0,
+
     )
 
-    # Add annotation for Duty Cycle and Survival Fraction in the middle of the shaded area
+    # Add annotation for Metric 1 and Metric 2 in the middle of the shaded area
     midpoint_x = (qe_start + qe_end) / 2
     fig.add_annotation(
         x=midpoint_x,
-        y=0.9,  # Position near the top of the plot for visibility
+        y=0.6,  # Position near the top of the plot for visibility
         yref="paper",
-        text=f"Duty Cycle: {qe_dc:.5f}<br>Survival Fraction: {qe_sf*100:.1f}%",  # Duty Cycle to 5 decimals, Survival Fraction as percentage with 1 decimal
+        text=f"Duty Cycle: {qe_dc:.5f}<br>Survival Fraction: {qe_sf*100:.1f}%",  # Metric 1 to 5 decimals, Metric 2 as percentage with 1 decimal
         showarrow=False,
         font=dict(size=12, color="black"),
         align="center",
@@ -281,15 +282,17 @@ def plot_time_series_interactive(duty_cycles, survival_fraction, qe_start, qe_en
     # Create axis objects
     fig.update_layout(
         xaxis=dict(title='Time (s)', showgrid=False, titlefont=dict(color='black'), tickfont=dict(color='black')),
-        yaxis=dict(title='Duty Cycle', titlefont=dict(color='black'), tickfont=dict(color='red'), range=[0, max(duty_cycles) * 1.1], showgrid=False),
-        yaxis2=dict(title='Survival Fraction', titlefont=dict(color='black'), tickfont=dict(color='blue'), overlaying='y', side='right', range=[0, 1], showgrid=False),
-        title='Duty Cycle and Survival Fraction Over Time'
+        yaxis=dict(title=metric1_name, titlefont=dict(color='black'), tickfont=dict(color='red'), range=[0, max(metric1_data)], showgrid=False),
+        yaxis2=dict(title=metric2_name, titlefont=dict(color='black'), tickfont=dict(color='blue'), overlaying='y', side='right', range=[0, max(metric2_data)], showgrid=False),
+        title=f'{metric1_name} and {metric2_name} Over Time'
     )
 
     # Update layout to be more aesthetically pleasing
-    fig.update_layout(showlegend=False, plot_bgcolor='white', paper_bgcolor='white')
+    fig.update_layout(showlegend=True, plot_bgcolor='white', paper_bgcolor='white')
 
     return fig
+
+
 
 
 def plot_intensity_vs_frame(plot_data):
@@ -319,69 +322,112 @@ def plot_intensity_vs_frame(plot_data):
 
     return fig
 
-def remove_outliers_upper(df, column):
-    """
-    Remove outliers based on the IQR method.
-    """
-    Q1 = df[column].quantile(0.30)
-    Q3 = df[column].quantile(0.90)
-    IQR = Q3 - Q1
-    upper_bound = Q3 + 1.5 * IQR
-    
-    # Filtering the data
-    filtered_df = df[df[column] <= upper_bound]
-    return filtered_df
+def remove_outliers_upper(data, num_bins):
+    # Generate histogram data
+    counts, bin_edges = np.histogram(data, num_bins)
 
-def plot_histograms(duty_cycle, photons, switching_cycles, track_intensity_within_range):
-    st.title("Frequency Histograms for Molecule Metrics")
+    # Traverse the counts in reverse to find the threshold bin
+    for i in range(len(counts) - 1, -1, -1):
+        if counts[i] > 1:  # Keep bins with more than 1 count
+            threshold = bin_edges[i + 1]  # Upper threshold (next bin edge)
+            break
 
-    # Remove Outliers based on IQ Range on the upper bound of the time series only
-    #duty_cycle = remove_outliers_upper(duty_cycle, 'Duty Cycle')
-    #photons = remove_outliers_upper(photons, 'Photons')
-    #switching_cycles = remove_outliers_upper(switching_cycles, 'Switching Cycles')
-    #track_intensity_within_range = remove_outliers_upper(track_intensity_within_range, 'Intensity')
+    # Filter the data based on the threshold
+    filtered_data = [x for x in data if x <= threshold]
+    return filtered_data
 
-    # Duty Cycle Histogram with Logarithmic y-axis
-    st.subheader("Duty Cycle Histogram")
-    fig, ax = plt.subplots()
-    ax.hist(duty_cycle, bins=40, color='skyblue', edgecolor='black')
-    ax.set_title('Duty Cycle per Molecule')
-    ax.set_xlabel('Duty Cycle')
-    ax.set_ylabel('Frequency')
-    ax.set_yscale('log')  # Set y-axis to log scale
-    st.pyplot(fig)  # Display Matplotlib figure in Streamlit
 
-    # Switching Cycles Histogram with Logarithmic y-axis
-    st.subheader("Switching Cycles Histogram")
-    fig, ax = plt.subplots()
-    ax.hist(switching_cycles, bins=40, color='lightgreen', edgecolor='black')
-    ax.set_title('Switching Cycles per Molecule')
-    ax.set_xlabel('Switching Cycles')
-    ax.set_ylabel('Frequency')
-    ax.set_yscale('log')  # Set y-axis to log scale
-    st.pyplot(fig)
+def plot_histograms(duty_cycle, photons, switching_cycles, on_time, metrics, remove_outliers=False, num_bins=40):
+    # Remove outliers if specified
+    # Note: This is a simple method to remove outliers based on the upper threshold
+    if remove_outliers:
+        duty_cycle = remove_outliers_upper(duty_cycle, num_bins)
+        photons = remove_outliers_upper(photons, num_bins)
+        switching_cycles = remove_outliers_upper(switching_cycles, num_bins)
+        on_time = remove_outliers_upper(on_time, num_bins)
 
-    # Convert to x10^3 for better readability the track intensity within range
-    track_intensity_within_range = [x/1000 for x in track_intensity_within_range]
+    # Convert to x10^3 for better readability of the photons
+    photons = [x / 1000 for x in photons]
 
-    # Track Intensity Within Range Histogram with Logarithmic x and y-axis
-    st.subheader("Photons per Track Histogram")
-    fig, ax = plt.subplots()
-    ax.hist(track_intensity_within_range, bins=40, color='lightpink', edgecolor='black')
-    ax.set_title('Intensity per Switching Cycle')
-    ax.set_xlabel('Photons (x10^3)')
-    ax.set_ylabel('Frequency')
-    ax.set_yscale('log')  # Set y-axis to log scale for better visibility of low frequencies
-    st.pyplot(fig)
+    # Grab the first row of the metrics DataFrame
+    metrics = metrics.iloc[0]
 
-    # Convert to x10^3 for better readability the photons
-    photons = [x/1000 for x in photons]
-    # photons per track per molecule histogram
-    st.subheader("Mean Photons per SC Histogram")
-    fig, ax = plt.subplots()
-    ax.hist(photons, bins=40, color='lightcoral', edgecolor='black')
-    ax.set_title('Mean Photons SC per Molecule')
-    ax.set_xlabel('Photons (x10^3)')    
-    ax.set_ylabel('Frequency')
-    ax.set_yscale('log')  # Set y-axis to log scale
-    st.pyplot(fig)
+    # Extract relevant metrics from the metrics dataset
+    duty_cycle_metrics = {
+        "QE Duty Cycle": metrics.get("QE Duty Cycle", "N/A").round(5),
+        "QE Survival Fraction": metrics.get("QE Survival Fraction", "N/A").round(3)
+    }
+    switching_cycles_metrics = {
+        "SC per Mol": metrics.get("SC per Mol", "N/A").round(2),
+        "QE SC per Mol": metrics.get("QE SC per Mol", "N/A").round(2)
+    }
+    on_time_metrics = {
+        "On Time per SC (s)": metrics.get("On Time per SC (s)", "N/A").round(2),
+        "QE On Time per SC (s)": metrics.get("QE On Time per SC (s)", "N/A").round(2)
+    }
+    photons_metrics = {
+        "Int. per SC (Photons)": metrics.get("Int. per SC (Photons)", "N/A").round(2),
+        "QE Int. per SC (Photons)": metrics.get("QE Int. per SC (Photons)", "N/A").round(2)
+    }
+
+    def add_annotations(fig, metric_dict, bg_color):
+        text = "<br>".join([f"{key}: {value}" for key, value in metric_dict.items()])
+        fig.add_annotation(
+            xref="paper", yref="paper",
+            x=1, y=1,  # Top-right corner
+            text=text,
+            showarrow=False,
+            font=dict(size=16, color="black"),  # Font size increased
+            align="right",
+            bgcolor=bg_color,  # Dynamic background color
+            bordercolor="black",
+            borderwidth=1
+        )
+
+    # Create Plotly Histograms with log-scaled x-axis
+    duty_cycle_fig = go.Figure(data=[go.Histogram(x=duty_cycle, nbinsx=num_bins, marker_color='lightblue')])
+    duty_cycle_fig.update_layout(
+        title='Duty Cycle per Molecule',
+        xaxis=dict(title='Duty Cycle'),
+        yaxis=dict(title='Frequency', type='log'),
+        bargap=0.2
+    )
+    add_annotations(duty_cycle_fig, duty_cycle_metrics, "lightblue")  # Background matches bar color
+
+    switching_cycles_fig = go.Figure(data=[go.Histogram(x=switching_cycles, nbinsx=num_bins, marker_color='lightcoral')])
+    switching_cycles_fig.update_layout(
+        title='Switching Cycles per Molecule',
+        xaxis=dict(title='Switching Cycles'),
+        yaxis=dict(title='Frequency', type='log'),
+        bargap=0.2
+    )
+    add_annotations(switching_cycles_fig, switching_cycles_metrics, "lightcoral")  # Background matches bar color
+
+    on_time_fig = go.Figure(data=[go.Histogram(x=on_time, nbinsx=num_bins, marker_color='lightgreen')])
+    on_time_fig.update_layout(
+        title='On Time per Molecule',
+        xaxis=dict(title='On Time (s)'),
+        yaxis=dict(title='Frequency', type='log'),
+        bargap=0.2
+    )
+    add_annotations(on_time_fig, on_time_metrics, "lightgreen")  # Background matches bar color
+
+    photons_fig = go.Figure(data=[go.Histogram(x=photons, nbinsx=num_bins, marker_color='yellow')])
+    photons_fig.update_layout(
+        title='Photons per Molecule',
+        xaxis=dict(title='Photons (x10^3)'),
+        yaxis=dict(title='Frequency', type='log'),
+        bargap=0.2
+    )
+    add_annotations(photons_fig, photons_metrics, "yellow")  # Background matches bar color
+
+
+    # Using columns to create a 2x2 grid layout in Streamlit
+    col1, col2 = st.columns(2)
+    with col1:
+        st.plotly_chart(duty_cycle_fig, use_container_width=True)
+        st.plotly_chart(on_time_fig, use_container_width=True)
+
+    with col2:
+        st.plotly_chart(switching_cycles_fig, use_container_width=True)
+        st.plotly_chart(photons_fig, use_container_width=True)

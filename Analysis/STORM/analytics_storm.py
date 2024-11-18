@@ -6,6 +6,7 @@ import streamlit as st
 
 import pandas as pd
 
+@st.cache_data
 def obtain_molecules_metrics(tracks, time_series, metadata):
     results = []
     
@@ -95,7 +96,6 @@ def aggregate_metrics(grouped_df):
         'Population Mol': 'sum',
         'QE DC Population': 'sum',
         'QE Active Population': 'sum',
-        # Replace 'mean' with a custom function that calculates the weighted mean:
         'QE Duty Cycle': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'QE DC Population']),
         'QE Survival Fraction': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'QE DC Population']),
         'Mid Survival Fraction': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'Population Mol']),
@@ -149,7 +149,7 @@ def calculate_quasi_equilibrium(duty_cycles):
 
 def calculate_time_series_metrics(molecules, tracks, interval, total_frames, exposure_time):
 
-    time_series_df = pd.DataFrame(columns=['Duty Cycle', 'Survival Fraction', 'Population Mol'])
+    time_series_df = pd.DataFrame(columns=['Duty Cycle', 'Survival Fraction', 'Population Mol', 'SC per Mol', 'On Time per SC (s)', 'Intensity per SC (Photons)'])
 
     frame_rate = 1000/exposure_time
     interval_frames = int(interval*frame_rate)
@@ -186,6 +186,11 @@ def calculate_time_series_metrics(molecules, tracks, interval, total_frames, exp
         total_on_time = 0
         total_possible_time = len(active_molecules) * interval_frames
 
+        switching_cycles = 0
+        int_per_sc = 0
+
+        total_tracks = 0
+
         # For each molecule, find relevant tracks
         for mol_id in mol_id_list:
             # Find relevant tracks for this molecule
@@ -195,6 +200,7 @@ def calculate_time_series_metrics(molecules, tracks, interval, total_frames, exp
             
             if len(relevant_tracks) > 0:
                 population += 1
+                switching_cycles += len(relevant_tracks) if len(relevant_tracks) > 0 else 0
             
             # Calculate on-time for each relevant track
             for _, track in relevant_tracks.iterrows():
@@ -204,65 +210,99 @@ def calculate_time_series_metrics(molecules, tracks, interval, total_frames, exp
 
                 # Calculate the on-time for this track in the bin
                 on_time = adjusted_end - adjusted_start
+
                 total_on_time += on_time
+
+                intensity = track['INTENSITY'] if track['INTENSITY'] > 0 else 0
+                int_per_sc += intensity 
+
+                total_tracks += 1
         
         # Calculate duty cycle for the bin
         if total_possible_time > 0:
-            duty_cycle = total_on_time / total_possible_time
+            duty_cycle = total_on_time / total_possible_time if total_possible_time > 0 else 0
+            on_time_per_sc = total_on_time / total_tracks if total_tracks > 0 else 0
+            sc_per_mol = switching_cycles / len(active_molecules) if len(active_molecules) > 0 else 0
+            int_per_sc = int_per_sc / total_tracks if total_tracks > 0 else 0
         else:
             duty_cycle = 0
+            on_time_per_sc = 0
+            sc_per_mol = 0
+            int_per_sc = 0
 
         end_bin_seconds = int(end_bin / frame_rate)
 
-        time_series_df.loc[end_bin_seconds] = [duty_cycle, survival_fraction, population]
+        time_series_df.loc[end_bin_seconds] = [duty_cycle, survival_fraction, population, sc_per_mol, on_time_per_sc, int_per_sc]
 
     return time_series_df
 
 
-def calculate_molecule_metrics(selected_qe_tracks, qe_start, qe_end, exp):
+
+def calculate_frequency(selected_qe_tracks, frames, qe_start, qe_end, exp, population='quasi', metric='molecule'):
     # Initialize dictionaries to store the results
-    molecule_duty_cycle = {}
-    molecule_photons = {}
-    molecule_switching_cycles = {}
-    track_intensity_within_range = []
+    results = {
+        'duty_cycle': [],
+        'photons': [],
+        'switching_cycles': [],
+        'on_time': []
+    }
 
-    frame_rate = 1000/exp
-    qe_start = int(qe_start*frame_rate)
-    qe_end = int(qe_end*frame_rate)
+    frame_rate = 1000 / exp
+    qe_start = int(qe_start * frame_rate)
+    qe_end = int(qe_end * frame_rate)
 
-    # Group by 'MOLECULE_ID' to process each molecule separately
-    for molecule_id, group in selected_qe_tracks.groupby('MOLECULE_ID'):
-        # Initialize metrics for the current molecule
-        duty_cycle_sum = 0
+    if population == 'quasi':
+        selected_qe_tracks = selected_qe_tracks[
+            (selected_qe_tracks['START_FRAME'] <= qe_end) & (selected_qe_tracks['END_FRAME'] >= qe_start)
+        ]
+
+    # Group by either 'MOLECULE_ID' or 'TRACK_ID' to process each entity separately
+    for entity_id, group in selected_qe_tracks.groupby('MOLECULE_ID'):
+        on_time_sum = 0
         photons_sum = 0
+        photons_track_count = 0
         switching_cycles = len(group)
 
         for _, track in group.iterrows():
-            start_frame = max(track['START_FRAME'], qe_start)  # Adjust START_FRAME to QE_START if necessary
-            end_frame = min(track['END_FRAME'], qe_end)        # Adjust END_FRAME to QE_END if necessary
+            start_frame = track['START_FRAME']
+            end_frame = track['END_FRAME']
+            if population == 'quasi':
+                start_frame = max(start_frame, qe_start)
+                end_frame = min(end_frame, qe_end)
 
-            # Calculate on-time within the quasi-equilibrium range
+            # Calculate on-time within the range
             on_time_within_range = max(0, end_frame - start_frame)
-            print(on_time_within_range)
-            duty_cycle_sum += on_time_within_range
 
-            # Check if the track overlaps the quasi-equilibrium range for photons calculation
-            if track['START_FRAME'] < qe_end and track['END_FRAME'] > qe_start:
-                photons_sum += track['INTENSITY']
+            on_time_sum += on_time_within_range
+            if on_time_within_range != 0:
+                if metric == 'molecule':
+                    photons_sum += track['INTENSITY']
+                    photons_track_count += 1
+                elif metric == 'track':
+                    results['photons'].append(track['INTENSITY'])
+                    results['on_time'].append(on_time_within_range / frame_rate)
 
-            # Check if the track is fully within the quasi-equilibrium range and add intensity
-            if track['START_FRAME'] >= qe_start and track['END_FRAME'] <= qe_end:
-                track_intensity_within_range.append(track['INTENSITY'])
+        # Calculate metrics
+        if population == 'quasi':
+            duty_cycle = on_time_sum / (qe_end - qe_start) if (qe_end - qe_start) > 0 else 0
+        else:
+            duty_cycle = on_time_sum / frames if frames > 0 else 0
 
-        # Store calculated metrics for the molecule
-        molecule_duty_cycle[molecule_id] = duty_cycle_sum/(qe_end - qe_start)
-        molecule_photons[molecule_id] = photons_sum/switching_cycles
-        molecule_switching_cycles[molecule_id] = switching_cycles
+        if metric == 'molecule':
+            photons = photons_sum / photons_track_count if photons_track_count > 0 else 0
+            on_time = on_time_sum / len(group) if len(group) > 0 else 0
 
-    # Convert results to DataFrames or Series for easy plotting
-    duty_cycle_series = pd.Series(molecule_duty_cycle, name='Duty Cycle')
-    photons_series = pd.Series(molecule_photons, name='Photons')
-    switching_cycles_series = pd.Series(molecule_switching_cycles, name='Switching Cycles')
-    intensity_series = pd.Series(track_intensity_within_range, name='Track Intensities')
+            results['photons'].append(photons)
+            results['on_time'].append(on_time)
 
-    return duty_cycle_series, photons_series, switching_cycles_series, intensity_series
+
+        results['duty_cycle'].append(duty_cycle)
+        results['switching_cycles'].append(switching_cycles)
+
+    # Convert results to DataFrames or Series for easy plotting and analysis
+    duty_cycle_series = pd.Series(results['duty_cycle'], name='Duty Cycle')
+    photons_series = pd.Series(results['photons'], name='Intensity per SC (Photons)')
+    switching_cycles_series = pd.Series(results['switching_cycles'], name='Switching Cycles')
+    on_time_series = pd.Series(results['on_time'], name='On Time per SC (s)')
+
+    return duty_cycle_series, photons_series, switching_cycles_series, on_time_series
