@@ -596,7 +596,8 @@ def run_storm_dashboard_ui(pulseSTORM_folder):
             on_time=on_time,
             metrics=selected_metrics,
             remove_outliers=remove_outliers,
-            num_bins=num_bins
+            num_bins=num_bins,
+            metric_type=grouping_type
         )
 
 
@@ -641,11 +642,13 @@ def run_storm_dashboard_ui(pulseSTORM_folder):
                             molecule_data = classification[key][molecule_index]
 
                             # Display photobleaching and duty cycle side by side (above intensity profile)
-                            col1, col2 = st.columns(2)
+                            col1, col2, col3 = st.columns(3)
                             with col1:
                                 # Change the duty cycle to 5 decimal places
                                 st.write(f"**Duty Cycle**: {molecule_data.get('Duty Cycle', 'N/A'):.5f}")
                             with col2:
+                                st.write(f"**Switching Cycles**: {len(molecule_data['Tracks'])}")
+                            with col3:
                                 st.write(f"**{molecule_data.get('Bleaching', 'N/A')}**")
                             
                             # Retrieve the tracks for the selected molecule from classification data

@@ -5,10 +5,8 @@ from tkinter import filedialog
 import tkinter as tk
 from Analysis.SOAC.analytics_soac_filaments import soac_analytics_pipeline
 from Analysis.SOAC.preprocessing_image_selection import *
-from Analysis.SOAC.analytics_ridge_filaments import analyze_data
 from Analysis.SOAC.soac_api import soac_api
 from Analysis.STORM.molecule_merging import process_tracks
-from Data_access import box_connection
 from Data_access.file_explorer import *
 
 def main():

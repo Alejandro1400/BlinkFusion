@@ -337,9 +337,16 @@ def remove_outliers_upper(data, num_bins):
     return filtered_data
 
 
-def plot_histograms(duty_cycle, photons, switching_cycles, on_time, metrics, remove_outliers=False, num_bins=40):
+def plot_histograms(duty_cycle, photons, switching_cycles, on_time, metrics, remove_outliers=False, num_bins=40, metric_type="molecule"):
+    # Count the total number of values before outlier removal
+    original_counts = {
+        "duty_cycle": len(duty_cycle),
+        "photons": len(photons),
+        "switching_cycles": len(switching_cycles),
+        "on_time": len(on_time)
+    }
+
     # Remove outliers if specified
-    # Note: This is a simple method to remove outliers based on the upper threshold
     if remove_outliers:
         duty_cycle = remove_outliers_upper(duty_cycle, num_bins)
         photons = remove_outliers_upper(photons, num_bins)
@@ -349,17 +356,16 @@ def plot_histograms(duty_cycle, photons, switching_cycles, on_time, metrics, rem
     # Convert to x10^3 for better readability of the photons
     photons = [x / 1000 for x in photons]
 
-    # Grab the first row of the metrics DataFrame
+    # Extract the first row of the metrics DataFrame
     metrics = metrics.iloc[0]
 
-    # Calculate the mean of the duty_cycle series for QE Duty Cycle
+    # Calculate means
     duty_cycle_mean = np.mean(duty_cycle) if len(duty_cycle) > 0 else "N/A"
     switching_cycles_mean = np.mean(switching_cycles) if len(switching_cycles) > 0 else "N/A"
     on_time_mean = np.mean(on_time) if len(on_time) > 0 else "N/A"
     photons_mean = np.mean(photons) if len(photons) > 0 else "N/A"
 
-
-    # Extract relevant metrics from the metrics dataset
+    # Extract metrics for annotations
     duty_cycle_metrics = {
         "QE Duty Cycle": round(duty_cycle_mean, 5) if duty_cycle_mean != "N/A" else "N/A",
         "QE Survival Fraction": metrics.get("QE Survival Fraction", "N/A").round(3)
@@ -384,52 +390,55 @@ def plot_histograms(duty_cycle, photons, switching_cycles, on_time, metrics, rem
             x=1, y=1,  # Top-right corner
             text=text,
             showarrow=False,
-            font=dict(size=16, color="black"),  # Font size increased
+            font=dict(size=16, color="black"),
             align="right",
-            bgcolor=bg_color,  # Dynamic background color
+            bgcolor=bg_color,
             bordercolor="black",
             borderwidth=1
         )
 
-    # Create Plotly Histograms with log-scaled x-axis
-    duty_cycle_fig = go.Figure(data=[go.Histogram(x=duty_cycle, nbinsx=num_bins, marker_color='lightblue')])
-    duty_cycle_fig.update_layout(
-        title='Duty Cycle per Molecule',
-        xaxis=dict(title='Duty Cycle'),
-        yaxis=dict(title='Frequency', type='log'),
-        bargap=0.2
-    )
-    add_annotations(duty_cycle_fig, duty_cycle_metrics, "lightblue")  # Background matches bar color
+    def create_histogram(data, title, xaxis_title, original_count, bar_color):
+        bin_counts, bin_edges = np.histogram(data, bins=num_bins)
+        percentages = (bin_counts / original_count) * 100
 
-    switching_cycles_fig = go.Figure(data=[go.Histogram(x=switching_cycles, nbinsx=num_bins, marker_color='lightcoral')])
-    switching_cycles_fig.update_layout(
-        title='Switching Cycles per Molecule',
-        xaxis=dict(title='Switching Cycles'),
-        yaxis=dict(title='Frequency', type='log'),
-        bargap=0.2
-    )
-    add_annotations(switching_cycles_fig, switching_cycles_metrics, "lightcoral")  # Background matches bar color
+        # Prepare hover text
+        hover_text = [
+            f"Bin: {bin_edges[i]:.5f} - {bin_edges[i + 1]:.5f}<br>Count: {count}<br>Percentage: {percent:.2f}%"
+            for i, (count, percent) in enumerate(zip(bin_counts, percentages))
+        ]
+        
+        fig = go.Figure(
+            data=[go.Bar(
+                x=bin_edges[:-1],
+                y=bin_counts,
+                text=hover_text,
+                hoverinfo="text",
+                marker_color=bar_color
+            )]
+        )
+        fig.update_layout(
+            title=title,
+            xaxis=dict(title=xaxis_title),
+            yaxis=dict(title='Frequency', type='log'),
+            bargap=0.2
+        )
+        return fig
 
-    on_time_fig = go.Figure(data=[go.Histogram(x=on_time, nbinsx=num_bins, marker_color='lightgreen')])
-    on_time_fig.update_layout(
-        title='On Time per Molecule',
-        xaxis=dict(title='On Time (s)'),
-        yaxis=dict(title='Frequency', type='log'),
-        bargap=0.2
-    )
-    add_annotations(on_time_fig, on_time_metrics, "lightgreen")  # Background matches bar color
+    # Create histograms
+    duty_cycle_fig = create_histogram(duty_cycle, 'Duty Cycle per Molecule', 'Duty Cycle', original_counts["duty_cycle"], 'lightblue')
+    add_annotations(duty_cycle_fig, duty_cycle_metrics, "lightblue")
 
-    photons_fig = go.Figure(data=[go.Histogram(x=photons, nbinsx=num_bins, marker_color='yellow')])
-    photons_fig.update_layout(
-        title='Photons per Molecule',
-        xaxis=dict(title='Photons (x10^3)'),
-        yaxis=dict(title='Frequency', type='log'),
-        bargap=0.2
-    )
-    add_annotations(photons_fig, photons_metrics, "yellow")  # Background matches bar color
+    switching_cycles_fig = create_histogram(switching_cycles, 'Switching Cycles per Molecule', 'Switching Cycles', original_counts["switching_cycles"], 'lightcoral')
+    add_annotations(switching_cycles_fig, switching_cycles_metrics, "lightcoral")
 
+    title_suffix = "Per Track" if metric_type == "track" else "Per Molecule"
+    on_time_fig = create_histogram(on_time, f'On Time {title_suffix}', 'On Time (s)', original_counts["on_time"], 'lightgreen')
+    add_annotations(on_time_fig, on_time_metrics, "lightgreen")
 
-    # Using columns to create a 2x2 grid layout in Streamlit
+    photons_fig = create_histogram(photons, f'Photons {title_suffix}', 'Photons (x10^3)', original_counts["photons"], 'yellow')
+    add_annotations(photons_fig, photons_metrics, "yellow")
+
+    # Display histograms in 2x2 layout
     col1, col2 = st.columns(2)
     with col1:
         st.plotly_chart(duty_cycle_fig, use_container_width=True)
