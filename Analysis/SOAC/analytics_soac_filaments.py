@@ -1,5 +1,4 @@
-
-
+import streamlit as st 
 import numpy as np
 import pandas as pd
 
@@ -156,46 +155,6 @@ def soac_analytics_pipeline(snakes, junctions):
     return snakes
 
 
-def weighted_avg_and_std(values, weights):
-    """
-    Return the weighted average and standard deviation.
-    values, weights -- Numpy ndarrays with the same shape.
-    """
-    average = np.average(values, weights=weights)
-    variance = np.average((values-average)**2, weights=weights)  # Fast and numerically precise
-    return (average, np.sqrt(variance))
-
-def obtain_cell_metrics(snakes):
-    # Group by both 'File' and 'Snake', then apply the metrics calculation
-    result = snakes.groupby(['File', 'Snake']).apply(calculate_snake_metrics)
-
-    # Preparing to calculate weighted averages and std deviation
-    weighted_metrics = {}
-    metrics = ['Intensity', 'SNR', 'Contrast', 'Continuity', 'Sinuosity']
-    
-    for metric in metrics:
-        weighted_avg, weighted_std = weighted_avg_and_std(
-            result[metric].values, 
-            result['Length'].values
-        )
-        weighted_metrics[f'{metric} (mean)'] = weighted_avg
-        weighted_metrics[f'{metric} (std)'] = weighted_std
-
-    # Calculate simple mean and std for Length and Junctions as these might not need weighting
-    weighted_metrics['Length (mean)'] = result['Length'].mean()
-    weighted_metrics['Length (std)'] = result['Length'].std()
-    weighted_metrics['Junctions (mean)'] = result['Junctions'].mean()
-    weighted_metrics['Junctions (std)'] = result['Junctions'].std()
-
-    # Put in order so that the means are first and the stds are second
-    weighted_metrics = {k: weighted_metrics[k] for k in weighted_metrics if 'mean' in k} | {k: weighted_metrics[k] for k in weighted_metrics if 'std' in k}
-
-    # Creating DataFrame
-    overall_metrics = pd.DataFrame(weighted_metrics, index=[0])
-
-    return overall_metrics
-
-
 def calculate_snake_metrics(group):
     std_background = group['Background'].std()
     mean_background = group['Background'].mean()
@@ -217,3 +176,62 @@ def calculate_snake_metrics(group):
     }
 
     return pd.Series(metrics)
+
+
+def weighted_avg_and_std(values, weights):
+    """
+    Compute weighted average and standard deviation.
+    """
+    weighted_mean = np.average(values, weights=weights)
+    weighted_variance = np.average((values - weighted_mean)**2, weights=weights)
+    weighted_std = np.sqrt(weighted_variance)
+    return weighted_mean, weighted_std
+
+
+def obtain_cell_metrics(snakes, selected_group):
+    """
+    Calculate weighted means and standard deviations for specific metrics
+    and return a DataFrame including group columns and calculated metrics.
+    """
+    grouped = snakes.groupby(selected_group)
+    
+    # List of metrics to calculate weighted mean and std
+    metrics = ['Intensity (au)', 'SNR', 'Contrast', 'Continuity', 'Sinuosity']
+    
+    # Initialize the results list
+    results = []
+
+    # Loop through each group
+    for group_name, group_data in grouped:
+        # Dictionary to store metrics for the current group
+        group_metrics = {col: group_name[i] for i, col in enumerate(selected_group)}
+
+        # Weighted calculations for specific metrics
+        for metric in metrics:
+            if metric in group_data.columns and 'Length (um)' in group_data.columns:
+                try:
+                    weighted_avg, weighted_std = weighted_avg_and_std(
+                        group_data[metric].values,
+                        group_data['Length (um)'].values
+                    )
+                    # Put the mean and std symbols in the column names
+                    group_metrics[f'{metric} - mean'] = weighted_avg
+                    group_metrics[f'{metric} - std'] = weighted_std
+                except ZeroDivisionError:
+                    # Handle division by zero if all lengths are zero
+                    group_metrics[f'{metric} - mean'] = np.nan
+                    group_metrics[f'{metric} - std'] = np.nan
+        
+        # Simple mean and std for Length and Junctions
+        for metric in ['Length (um)', 'Junctions']:
+            if metric in group_data.columns:
+                group_metrics[f'{metric} - mean'] = group_data[metric].mean()
+                group_metrics[f'{metric} - std'] = group_data[metric].std()
+
+        # Append the metrics for this group to results
+        results.append(group_metrics)
+
+    # Convert results into a DataFrame
+    overall_metrics = pd.DataFrame(results)
+    
+    return overall_metrics

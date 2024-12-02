@@ -328,7 +328,7 @@ def remove_outliers_upper(data, num_bins):
 
     # Traverse the counts in reverse to find the threshold bin
     for i in range(len(counts) - 1, -1, -1):
-        if counts[i] > 1:  # Keep bins with more than 1 count
+        if counts[i] > 3:  # Keep bins with more than 1 count
             threshold = bin_edges[i + 1]  # Upper threshold (next bin edge)
             break
 
@@ -352,22 +352,29 @@ def plot_histograms(duty_cycle, photons, switching_cycles, on_time, metrics, rem
     # Grab the first row of the metrics DataFrame
     metrics = metrics.iloc[0]
 
+    # Calculate the mean of the duty_cycle series for QE Duty Cycle
+    duty_cycle_mean = np.mean(duty_cycle) if len(duty_cycle) > 0 else "N/A"
+    switching_cycles_mean = np.mean(switching_cycles) if len(switching_cycles) > 0 else "N/A"
+    on_time_mean = np.mean(on_time) if len(on_time) > 0 else "N/A"
+    photons_mean = np.mean(photons) if len(photons) > 0 else "N/A"
+
+
     # Extract relevant metrics from the metrics dataset
     duty_cycle_metrics = {
-        "QE Duty Cycle": metrics.get("QE Duty Cycle", "N/A").round(5),
+        "QE Duty Cycle": round(duty_cycle_mean, 5) if duty_cycle_mean != "N/A" else "N/A",
         "QE Survival Fraction": metrics.get("QE Survival Fraction", "N/A").round(3)
     }
     switching_cycles_metrics = {
         "SC per Mol": metrics.get("SC per Mol", "N/A").round(2),
-        "QE SC per Mol": metrics.get("QE SC per Mol", "N/A").round(2)
+        "QE SC per Mol": round(switching_cycles_mean, 2) if switching_cycles_mean != "N/A" else "N/A"
     }
     on_time_metrics = {
         "On Time per SC (s)": metrics.get("On Time per SC (s)", "N/A").round(2),
-        "QE On Time per SC (s)": metrics.get("QE On Time per SC (s)", "N/A").round(2)
+        "QE On Time per SC (s)": round(on_time_mean, 2) if on_time_mean != "N/A" else "N/A"
     }
     photons_metrics = {
         "Int. per SC (Photons)": metrics.get("Int. per SC (Photons)", "N/A").round(2),
-        "QE Int. per SC (Photons)": metrics.get("QE Int. per SC (Photons)", "N/A").round(2)
+        "QE Int. per SC (Photons)": round(photons_mean, 2) if photons_mean != "N/A" else "N/A"
     }
 
     def add_annotations(fig, metric_dict, bg_color):

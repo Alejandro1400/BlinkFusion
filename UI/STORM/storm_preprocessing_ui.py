@@ -5,199 +5,216 @@ import streamlit as st
 from Data_access.file_explorer import find_items, find_valid_folders
 from Data_access.metadata_manager import aggregate_metadata_info, czi_2_tiff, extract_values_from_title, read_tiff_metadata
 
-#@st.cache_data
-def load_storm_metadata(storm_folder, reload_trigger):
 
-    #try: 
+def load_storm_metadata(storm_folder, reload_trigger):
+    """
+    Load and process metadata from a specified STORM folder. This function identifies valid folders,
+    extracts metadata from `.tif` files, and compiles the data into a structured format.
+
+    Args:
+        storm_folder (str): Path to the main folder containing STORM `.tif` files.
+        reload_trigger (int): A trigger to reload data when a user makes changes.
+
+    Returns:
+        dict: A dictionary containing metadata items where each key is the metadata `id` and
+              the value is a list of tuples with `value` and `type`.
+    """
+    # Notify user about the processing progress
+    #st.info("Searching for valid folders...")
+
+    # Find folders containing `.tif` files and exclude unnecessary folders
     valid_folders = find_valid_folders(
         storm_folder,
         required_files={'.tif'}
     )
-
     valid_folders = [folder for folder in valid_folders if not folder.endswith('ROIs')]
 
+    if not valid_folders:
+        st.warning("No valid folders found. Please ensure the folder structure is correct.")
+        return {}
+
     database_metadata = {}
+    total_folders = len(valid_folders)
 
-    for folder in valid_folders:
+    # Progress bar for visual feedback
+    status_text = st.text(f"Processing {total_folders} folders...")
+    progress_bar = st.progress(0)
 
-        print(f"Processing folder: {folder}")
-      
-        # Find tif files in folder
-        tif_file = find_items(base_directory=folder, item='.tif', is_folder=False, check_multiple=False, search_by_extension=True)
+    # Process each valid folder
+    for index, folder in enumerate(valid_folders):
+        #st.write(f"Processing folder: **{folder}**")
 
-        print(f"Found tif file: {tif_file}")
+        # Find the first `.tif` file in the folder
+        tif_file = find_items(
+            base_directory=folder,
+            item='.tif',
+            is_folder=False,
+            check_multiple=False,
+            search_by_extension=True
+        )
 
-        # Obtain metadata from the tif file
-        metadata = read_tiff_metadata(tif_file, root_tag = 'pulsestorm')
+        if not tif_file:
+            st.warning(f"No `.tif` file found in folder: {folder}. Skipping.")
+            continue
 
-        print(f"Metadata: {metadata}")
+        # Extract metadata from the `.tif` file
+        metadata = read_tiff_metadata(tif_file, root_tag='pulsestorm')
 
+        # Debugging feedback
+        #st.write(f"Metadata extracted from `{tif_file}`: {metadata}")
 
-        # Process each metadata item
+        # Process each metadata item and populate the database
         for item in metadata:
-            # Initialize a tuple to represent the value and type
             entry = (item['value'], item['type'])
-            
-            # Check if the id from the metadata is already in the database_metadata
+
             if item['id'] in database_metadata:
-                # Check if the value already exists in the list; if not, append it
+                # Avoid duplicate entries
                 if entry not in database_metadata[item['id']]:
                     database_metadata[item['id']].append(entry)
             else:
-                # Create a new entry in the dictionary with the value and type in a tuple inside a list
+                # Initialize a new key in the dictionary
                 database_metadata[item['id']] = [entry]
-        
+
+        # Update the progress bar
+        progress_bar.progress((index + 1) / total_folders, text=f"Processing folder {index + 1} of {total_folders}")
+
+    # Clear progress indicator once processing is complete
+    status_text.empty()
+    progress_bar.empty()
+    st.success("Metadata loading completed.")
 
     return database_metadata
 
-# Function to increment the reload trigger
+
 def reload_metadata():
-    st.session_state.reload_trigger += 1
+    """
+    Increment the reload trigger in Streamlit session state to refresh data.
+    """
+    if 'reload_trigger' in st.session_state:
+        st.session_state.reload_trigger += 1
+    else:
+        st.session_state.reload_trigger = 1
+    st.success("Reload triggered.")
+
 
 def run_storm_preprocessing_ui(storm_folder):
+    """
+    Streamlit UI for preprocessing STORM metadata. This interface allows users to upload files,
+    view and edit metadata, and add new metadata entries for processing.
 
-    # Initialize the session state variable if it does not already exist
-    if 'selected_for_folder' not in st.session_state:
-        st.session_state.selected_for_folder = []
-        st.session_state.selected_for_folder.append("Date")
+    Args:
+        storm_folder (str): Path to the folder containing STORM `.tif` files and associated metadata.
+    """
 
-    if 'metadata_values' not in st.session_state:
-        st.session_state.metadata_values = {}
-
-    if 'show_add_form' not in st.session_state:
-        st.session_state.show_add_form = False
-
-    if 'reload_trigger' not in st.session_state:
-        st.session_state.reload_trigger = 0
+    # Initialize session state variables
+    st.session_state.setdefault('selected_for_folder', ["Date"])
+    st.session_state.setdefault('metadata_values', {})
+    st.session_state.setdefault('show_add_form', False)
+    st.session_state.setdefault('reload_trigger', 0)
 
     # Load metadata from the database
     db_metadata = load_storm_metadata(storm_folder, st.session_state.reload_trigger)
 
-    upload_path = st.text_input("Enter the path to the folder or file you wish to upload.")
+    # Input for uploading file or folder
+    upload_path = st.text_input(
+        "Enter the path to the folder or file you wish to upload.",
+        help="Specify the path to the folder or file for which metadata needs to be added or updated."
+    )
 
+    # File Metadata Section
     with st.expander("File Metadata"):
         if upload_path:
             all_files_metadata = {}
-            # Check if upload path is folder or file
             if os.path.isdir(upload_path):
-                st.write("Folder selected, all assigned metada values will apply to all files in the folder.")
-
-                # Find all files in the folder
+                st.write("**Folder selected:** Metadata will apply to all files in the folder.")
                 files = find_items(base_directory=upload_path, item='.czi', is_folder=False, check_multiple=True, search_by_extension=True)
 
-                # Search for metadata in the files (prop, 'acquisition-time-local', 'pixel-size-x', 'pixel-size-y', 'ALC Laser')
                 for file in files:
                     title_metadata = extract_values_from_title(os.path.basename(file))
                     all_files_metadata[file] = title_metadata
 
-
-
             elif os.path.isfile(upload_path):
-                st.write("File selected, metadata will be added to the file. Here will only be shown the data extracted from the title")
+                st.write("**File selected:** Metadata extracted from the title will be displayed.")
+                title_metadata = extract_values_from_title(os.path.basename(upload_path))
+                all_files_metadata[upload_path] = title_metadata
 
-                title_metadata = extract_values_from_title(os.path.basename(file))
-                all_files_metadata[file] = title_metadata
-
-
-            # Write the unique ids and their types as a table
-            # Aggregating metadata information
+            # Summarize metadata
             summary_df = aggregate_metadata_info(all_files_metadata)
-
-            st.write(f"Files to upload: {len(files)}")
-
-            st.write("Tif Metadata to be added (Count displays how many files have values):")
+            st.write(f"**Files to upload:** {len(all_files_metadata)}")
+            st.write("**Extracted Metadata:** (Count indicates how many files have values)")
             st.table(summary_df)
-
-
         else:
-            st.write("Please select a folder or file to continue.")
+            st.warning("Please select a folder or file to continue.")
 
-
+    # Database Metadata Section
     with st.expander("Database Metadata"):
-        st.write(f"Metadata found in Database: {storm_folder}")
+        st.write(f"**Metadata found in Database: {storm_folder}**")
+        if not db_metadata:
+            st.info("No metadata found in the database.")
+        else:
+            for metadata_id, entries in db_metadata.items():
+                with st.container():
+                    col1, col2 = st.columns([3, 1])
 
-        if len(db_metadata) == 0:
-            st.write("No metadata found in the database.")
+                    with col1:
+                        # Create current values list for the selectbox
+                        current_values = [entry[0] for entry in entries] + [None, "Add new..."]
+                        current_selection = st.session_state.metadata_values.get(metadata_id, [(current_values[0], entries[0][1])])[0][0]
 
-        for metadata_id, entries in db_metadata.items():
-            with st.container():
-                col1, col2 = st.columns([3, 1])
-                
-                with col1:
-                    # Prepare current values list for the selectbox
-                    current_values = [entry[0] for entry in entries]
-                    current_values.append(None)
-                    current_values.append("Add new...")  # Option to add a new value
+                        if current_selection not in current_values:
+                            current_values.insert(0, current_selection)
 
-                    # Attempt to get the currently selected value or default to the first available value
-                    current_selection = st.session_state.metadata_values.get(metadata_id, [(current_values[0], entries[0][1])])[0][0]
+                        selected_value = st.selectbox(
+                            f"{metadata_id} ({entries[0][1]})",
+                            current_values,
+                            index=current_values.index(current_selection),
+                            key=f"{metadata_id}_value_select"
+                        )
 
-                    if current_selection not in current_values:
-                        current_values.insert(0, current_selection)
+                        if selected_value == "Add new...":
+                            new_value = st.text_input(f"Enter new value for {metadata_id}", key=f"{metadata_id}_new_value")
+                            if new_value:
+                                st.session_state.metadata_values[metadata_id] = [(new_value, entries[0][1])]
+                        elif selected_value is None:
+                            st.session_state.metadata_values[metadata_id] = [(None, entries[0][1])]
+                        else:
+                            st.session_state.metadata_values[metadata_id] = [(selected_value, entries[0][1])]
 
-                    selected_value = st.selectbox(f"{metadata_id} ({entries[0][1]})", current_values, index=current_values.index(current_selection), key=f"{metadata_id}_value_select")
-                  
-
-                    if selected_value == "Add new...":
-                        new_value = st.text_input("Enter new value", key=f"{metadata_id}_new_value")
-                        if new_value:
-                            # Directly update or append the new value tuple to session state
-                            st.session_state.metadata_values[metadata_id] = [(new_value, entries[0][1])]
-                    elif selected_value == None:
-                        st.session_state.metadata_values[metadata_id] = [(None, entries[0][1])]
-                    else:
-                        st.session_state.metadata_values[metadata_id] = [(selected_value, entries[0][1])]
-
-
-                with col2:
-                    folder_selected = st.checkbox("Folder", key=f"{metadata_id}_folder")
-                    if folder_selected:
-                        if metadata_id not in st.session_state.selected_for_folder:
+                    with col2:
+                        folder_selected = st.checkbox("Folder", key=f"{metadata_id}_folder")
+                        if folder_selected and metadata_id not in st.session_state.selected_for_folder:
                             st.session_state.selected_for_folder.append(metadata_id)
-                    else:
-                        if metadata_id in st.session_state.selected_for_folder:
+                        elif not folder_selected and metadata_id in st.session_state.selected_for_folder:
                             st.session_state.selected_for_folder.remove(metadata_id)
-                        
-    
-    # Use an expander for the form
+
+    # Add Metadata Form Section
     with st.expander("Add Metadata"):
         with st.form(key='new_metadata_form'):
-            new_id = st.text_input('ID')
-            new_type = st.selectbox('Type', ['string', 'float', 'int'])
-            new_value = st.text_input('Value')
-            new_folder = st.checkbox('Folder')
+            new_id = st.text_input("Metadata ID", help="Enter a unique identifier for the metadata.")
+            new_type = st.selectbox("Data Type", ['string', 'float', 'int'], help="Select the type of the metadata value.")
+            new_value = st.text_input("Value", help="Enter the value for the metadata.")
+            new_folder = st.checkbox("Mark as Folder", help="Check this if the metadata represents a folder.")
 
-            submit_button = st.form_submit_button(label='Add Metadata')
-            if submit_button:
-                # Validate ID uniqueness and value type consistency
-                if new_id in st.session_state.metadata_values:
-                    st.error('This ID already exists. Please use a unique ID.')
+            if st.form_submit_button(label="Add Metadata"):
+                if not new_id or not new_value:
+                    st.error("Both ID and Value are required.")
+                elif new_id in st.session_state.metadata_values:
+                    st.error("This ID already exists. Please use a unique ID.")
                 elif not validate_value_with_type(new_value, new_type):
-                    st.error('The type of the value does not match the selected type. Please correct it.')
-                elif new_id and new_value:
-                    # Update db_metadata and session state only if validations pass
-                    if new_id not in st.session_state.metadata_values:
-                        # Assign type to the value
-
-                        st.session_state.metadata_values[new_id] = [(new_value, new_type)]
-                        if new_folder:
-                            st.session_state.selected_for_folder.append(new_id)
-
-                    # Clear form fields after successful submission
-                    new_id = ""
-                    new_value = ""
-                    new_folder = False
-
-                    st.success('Metadata added successfully!')
+                    st.error("The value does not match the selected data type.")
                 else:
-                    st.error('Both ID and Value must be provided.')
+                    st.session_state.metadata_values[new_id] = [(new_value, new_type)]
+                    if new_folder:
+                        st.session_state.selected_for_folder.append(new_id)
+                    st.success(f"Metadata `{new_id}` added successfully!")
         
 
     with st.expander("Preview"):
-         # Display selected folder order
-        st.write("Metadata overview with folder hierarchy (Date is always first):")
+        # Metadata overview
+        st.subheader("Metadata Overview")
+        st.info("The table below shows metadata with folder hierarchy based on selected metadata keys.")
 
-        # Display metadata with type information directly associated with each ID
+        # Format metadata for display
         formatted_metadata = [{
             'root_tag': 'pulsestorm',
             'id': key,
@@ -206,47 +223,59 @@ def run_storm_preprocessing_ui(storm_folder):
             'Folder': (st.session_state.selected_for_folder.index(key) + 1 if key in st.session_state.selected_for_folder else None)
         } for key, values in st.session_state.metadata_values.items() if values[0][0] is not None]
 
-        # Remove root_tag from the table and set ID as index
         if formatted_metadata:
             df = pd.DataFrame(formatted_metadata)
             df = df.drop(columns=['root_tag'])
             df.set_index('id', inplace=True)
-            # Change folder column to int
-            df['Folder'] = df['Folder'].astype('Int64')
+            df['Folder'] = df['Folder'].astype('Int64')  # Convert Folder column to Int64 for consistency
             st.table(df)
         else:
-            st.write("No metadata loaded.")
+            st.warning("No metadata loaded for preview.")
 
+        # Upload Files Button
         if st.button("Upload Files"):
-            if all_files_metadata:  # Check if any files have been selected and metadata processed
+            if all_files_metadata:
                 num_files = len(all_files_metadata)
-                st.write(f"{num_files} Files will be uploaded to '{storm_folder}' with the following folder hierarchy:")
-                
-                # Display the selected metadata keys that are marked for folder creation
+                st.success(f"Preparing to upload {num_files} file(s) to `{storm_folder}` with the following folder hierarchy:")
+
+                # Display selected metadata keys for folder creation
                 selected_metadata = [key for key in st.session_state.selected_for_folder]
                 st.write(f"Metadata hierarchy: {selected_metadata}")
 
-                # Remove 'Folder' key from each dictionary in the list
+                # Remove 'Folder' key from formatted metadata for processing
                 for entry in formatted_metadata:
-                    entry.pop('Folder')
+                    entry.pop('Folder', None)
 
-                # Process each file and their associated metadata
+                # Process and upload files
                 for file, metadata in all_files_metadata.items():
-
-                    # Combined metadata by merging corresponding dictionaries
                     combined_metadata = formatted_metadata + metadata
+                    st.write(f"Uploading file: `{file}` to `{storm_folder}`...")
                     
-                    st.write(f"File: {file} is being uploaded to: {storm_folder}")
+                    try:
+                        # Convert CZI to TIFF with associated metadata
+                        czi_2_tiff(file, storm_folder, st.session_state.selected_for_folder, combined_metadata)
+                        st.success(f"File `{file}` successfully uploaded.")
+                    except Exception as e:
+                        st.error(f"Failed to upload file `{file}`. Error: {e}")
+                        continue
 
-                    czi_2_tiff(file, storm_folder, st.session_state.selected_for_folder, combined_metadata)
-
-                    reload_metadata()
+                # Trigger metadata reload
+                reload_metadata()
             else:
-                st.write("No files have been processed for upload.")
+                st.warning("No files have been selected for upload.")
 
 
 def validate_value_with_type(value, value_type):
-    """Helper function to validate the type of the value matches the expected type."""
+    """
+    Helper function to validate if the provided value matches the expected type.
+
+    Args:
+        value: The value to be validated.
+        value_type (str): The expected type ('int', 'float', 'string').
+
+    Returns:
+        bool: True if the value matches the type, False otherwise.
+    """
     try:
         if value_type == 'int':
             int(value)

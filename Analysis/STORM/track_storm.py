@@ -15,7 +15,7 @@ def merge_localizations(df, start_time, min_frames=3, max_gaps=2, max_distance=2
     df['frame'] = df['frame'].astype(int)
 
     # If uncertainty_xy column is uncertainty [nm], rename it
-    if 'uncertainty [nm]' in df.columns:
+    if 'uncertainty_xy [nm]' in df.columns:
         df.rename(columns={'uncertainty_xy [nm]': 'uncertainty [nm]'}, inplace=True)
 
     # Initialize track ID column
