@@ -73,8 +73,3 @@ python -m streamlit run app.py
 3. Explore outputs like histograms, scatter plots, or detailed analyses.
 
 ---
-
-
----
-
-Would you like me to generate the `requirements.txt` file based on your imports?
