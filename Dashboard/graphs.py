@@ -380,7 +380,7 @@ def plot_histograms(duty_cycle, photons, switching_cycles, on_time, metrics, rem
     }
     photons_metrics = {
         "Int. per SC (Photons)": metrics.get("Int. per SC (Photons)", "N/A").round(2),
-        "QE Int. per SC (Photons)": round(photons_mean, 2) if photons_mean != "N/A" else "N/A"
+        "QE Int. per SC (Photons)": round(photons_mean*1000, 2) if photons_mean != "N/A" else "N/A"
     }
 
     def add_annotations(fig, metric_dict, bg_color):

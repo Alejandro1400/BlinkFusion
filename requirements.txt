@@ -1,0 +1,13 @@
+streamlit
+pandas
+numpy
+matplotlib
+seaborn
+plotly
+scipy
+czifile
+tifffile
+ridge_detection
+Pillow
+tabulate
+tkinter
