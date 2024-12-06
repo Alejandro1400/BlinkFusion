@@ -25,7 +25,6 @@ Install them by running:
 ```bash
 pip install -r requirements.txt
 ```
-> Generate a `requirements.txt` file by including the above dependencies with their versions.
 
 ---
 
