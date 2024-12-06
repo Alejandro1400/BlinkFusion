@@ -75,6 +75,14 @@ def load_storm_data(pulseSTORM_folder):
 
                 # Process metadata
                 pulsestorm_metadata = read_tiff_metadata(tif_file, root_tag=['pulsestorm', 'czi-pulsestorm'])
+                metadata_dict = {}
+
+                # Loop through each item in the metadata list
+                for item in pulsestorm_metadata:
+                    # Check if the item's 'id' is not already in the dictionary
+                    if item['id'] not in metadata_dict:
+                        # If not present, add the item's 'id' and 'value' to the dictionary
+                        metadata_dict[item['id']] = item['value']
                 metadata_dict = {item['id']: item['value'] for item in pulsestorm_metadata}
 
                 def extract_image_name(path):
