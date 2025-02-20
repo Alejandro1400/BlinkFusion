@@ -413,7 +413,7 @@ def plot_histograms(duty_cycle, photons, switching_cycles, on_time, metrics, rem
                 y=bin_counts,
                 text=hover_text,
                 hoverinfo="text",
-                marker_color=bar_color
+                marker_color=bar_color if color_mode else "gray"
             )]
         )
         fig.update_layout(
@@ -423,6 +423,9 @@ def plot_histograms(duty_cycle, photons, switching_cycles, on_time, metrics, rem
             bargap=0.2
         )
         return fig
+    
+    # UI Components
+    color_mode = st.toggle("Enable Colored Histograms", value=True)
 
     # Create histograms
     duty_cycle_fig = create_histogram(duty_cycle, 'Duty Cycle per Molecule', 'Duty Cycle', original_counts["duty_cycle"], 'lightblue')
@@ -447,3 +450,14 @@ def plot_histograms(duty_cycle, photons, switching_cycles, on_time, metrics, rem
     with col2:
         st.plotly_chart(switching_cycles_fig, use_container_width=True)
         st.plotly_chart(photons_fig, use_container_width=True)
+
+    # Export Data Button for Each Histogram
+    def export_data(metric_name, values):
+        df_export = pd.DataFrame({metric_name: values})
+        csv = df_export.to_csv(index=False).encode('utf-8')
+        st.download_button(f"Export {metric_name} Info", csv, f"{metric_name.lower()}_info.csv", "text/csv")
+
+    export_data("Duty Cycle", duty_cycle)
+    export_data("Switching Cycles", switching_cycles)
+    export_data("On Time", on_time)
+    export_data("Photons", photons)
