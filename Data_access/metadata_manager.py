@@ -89,7 +89,7 @@ def czi_2_tiff(czi_filepath, tif_folder, hierarchy_folders, tags):
         value_str = f'"{tag["value"]}"' 
 
         # Format the new tag string
-        new_tag = f'<{tag["root_tag"]} id="{tag["id"]}" type="{tag["type"]}" value={value_str}/>\n'
+        new_tag = f'<{tag["tag"]} id="{tag["id"]}" type="{tag["type"]}" value={value_str}/>\n'
         new_tags_str += new_tag
 
     image_desc_fin = '</MetaData>\n'
@@ -125,11 +125,11 @@ def read_czi_metadata_from_string(metadata):
     frames = int(size_t)
 
     czi_metadata = [
-        {'root_tag': 'czi-pulsestorm', 'id': 'Date', 'type': 'string', 'value': date if date else None},
-        {'root_tag': 'czi-pulsestorm', 'id': 'Pixel Dimensions', 'type': 'string', 'value': dimensions if dimensions else None},
-        {'root_tag': 'czi-pulsestorm', 'id': 'Laser', 'type': 'string', 'value': laser_name if laser_name else None},
-        {'root_tag': 'czi-pulsestorm', 'id': 'Frames', 'type': 'int', 'value': frames if frames else None},
-        {'root_tag': 'czi-pulsestorm', 'id': 'Mode', 'type': 'string', 'value': fw_fov_position if fw_fov_position else None}
+        {'tag': 'czi-pulsestorm', 'id': 'Date', 'type': 'string', 'value': date if date else None},
+        {'tag': 'czi-pulsestorm', 'id': 'Pixel Dimensions', 'type': 'string', 'value': dimensions if dimensions else None},
+        {'tag': 'czi-pulsestorm', 'id': 'Laser', 'type': 'string', 'value': laser_name if laser_name else None},
+        {'tag': 'czi-pulsestorm', 'id': 'Frames', 'type': 'int', 'value': frames if frames else None},
+        {'tag': 'czi-pulsestorm', 'id': 'Mode', 'type': 'string', 'value': fw_fov_position if fw_fov_position else None}
     ]
 
     return czi_metadata
@@ -138,22 +138,18 @@ def read_czi_metadata_from_string(metadata):
 def extract_values_from_title(title):
     # Define a regex pattern to match key-value pairs
     pattern = r'(angle|laser|exp|gain)(\d+\.?\d*)'
-
-    print("Title:", title)
     
     # Search the string for all occurrences of the pattern
     matches = re.findall(pattern, title)
-
-    print("Matches:", matches)
     
     # Convert matches into a dictionary
     values = {key: float(value) for key, value in matches}
 
     pulsestorm_metadata = [
-        {'root_tag': 'czi-pulsestorm', 'id': 'Angle', 'type': 'float', 'value': values.get('angle')},
-        {'root_tag': 'czi-pulsestorm', 'id': 'Laser', 'type': 'float', 'value': values.get('laser')},
-        {'root_tag': 'czi-pulsestorm', 'id': 'Exposure', 'type': 'float', 'value': values.get('exp')},
-        {'root_tag': 'czi-pulsestorm', 'id': 'Gain', 'type': 'float', 'value': values.get('gain')}
+        {'tag': 'czi-pulsestorm', 'id': 'Angle', 'type': 'float', 'value': values.get('angle')},
+        {'tag': 'czi-pulsestorm', 'id': 'Laser', 'type': 'float', 'value': values.get('laser')},
+        {'tag': 'czi-pulsestorm', 'id': 'Exposure', 'type': 'float', 'value': values.get('exp')},
+        {'tag': 'czi-pulsestorm', 'id': 'Gain', 'type': 'float', 'value': values.get('gain')}
     ]
     
     return pulsestorm_metadata
