@@ -3,9 +3,9 @@ import pandas as pd
 import streamlit as st
 
 from Data_access.database_manager import DatabaseManager
-from Data_access.file_explorer import find_items, find_valid_folders
+from Data_access.file_explorer import find_items
 from Data_access.metadata_manager import (
-    aggregate_metadata_info, czi_2_tiff, extract_values_from_title, read_tiff_metadata
+    aggregate_metadata_info, czi_2_tiff, extract_values_from_title
 )
 
 
@@ -50,11 +50,14 @@ def save_metadata_to_database(database_folder, all_files_metadata, formatted_met
 
             # Step 2: Converting CZI to TIFF
             progress_placeholder.write(f"🔄 **Converting `{file_name}` from CZI to TIFF...**")
-            czi_2_tiff(file, database_folder, st.session_state.selected_for_folder, combined_metadata)
+            final_folder_path = czi_2_tiff(file, database_folder, st.session_state.selected_for_folder, combined_metadata)
+
+            # Extract relative folder path (removing database folder)
+            relative_folder_path = os.path.relpath(final_folder_path, database_folder)
 
             # Step 3: Saving metadata to the database
             progress_placeholder.write(f"💾 **Saving metadata for `{file_name}` into the database...**")
-            storm_db.save_metadata(combined_metadata, file_name)
+            storm_db.save_metadata(combined_metadata, relative_folder_path)
 
             # Step 4: Success message
             progress_placeholder.success(f"✅ `{file_name}` successfully uploaded and metadata stored!")
@@ -65,8 +68,6 @@ def save_metadata_to_database(database_folder, all_files_metadata, formatted_met
 
     storm_db.close()  # Close connection after all uploads
     reload_metadata()  # Refresh UI to reflect changes
-
-
 
 
 

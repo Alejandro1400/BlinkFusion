@@ -156,6 +156,7 @@ class DatabaseManager:
         """)
         self.conn.commit()
 
+
     def save_metadata(self, metadata, file_name):
         """
         Save extracted metadata to the database, including the `tag` field.

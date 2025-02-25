@@ -81,28 +81,25 @@ def czi_2_tiff(czi_filepath, tif_folder, hierarchy_folders, tags):
 
     folder_path.append(os.path.basename(czi_filepath).replace('.czi', ''))
 
-    tif_filepath = os.path.join(tif_folder, *folder_path, os.path.basename(czi_filepath).replace('.czi', '.tif'))
+    # Define final TIFF file path
+    final_folder_path = os.path.join(tif_folder, *folder_path)
+    tif_filepath = os.path.join(final_folder_path, os.path.basename(czi_filepath).replace('.czi', '.tif'))
 
-    # Prepare new tags as a string to insert
-    new_tags_str = ''
-    for tag in tags:
-        value_str = f'"{tag["value"]}"' 
+    # Prepare metadata description for TIFF
+    new_tags_str = "\n".join([
+        f'<{tag["tag"]} id="{tag["id"]}" type="{tag["type"]}" value="{tag["value"]}"/>' 
+        for tag in tags
+    ])
 
-        # Format the new tag string
-        new_tag = f'<{tag["tag"]} id="{tag["id"]}" type="{tag["type"]}" value={value_str}/>\n'
-        new_tags_str += new_tag
-
-    image_desc_fin = '</MetaData>\n'
-
-    updated_metadata = image_desc + czi_metadata + new_tags_str + image_desc_fin
+    updated_metadata = f'<MetaData>\n<czi-file-metadata id="Description" type="string" value="{metadata}">\n{new_tags_str}\n</MetaData>'
 
     # Check if the folders for the new file path exist, and create them if not
-    new_folder = os.path.dirname(tif_filepath)
-    if not os.path.exists(new_folder):
-        os.makedirs(new_folder)
+    os.makedirs(final_folder_path, exist_ok=True)
 
     # Save the modified image to a new file with updated metadata
     tifffile.imsave(tif_filepath, image_data, description=updated_metadata)
+
+    return final_folder_path
 
 
 def read_czi_metadata_from_string(metadata):
