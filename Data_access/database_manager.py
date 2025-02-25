@@ -198,6 +198,29 @@ class DatabaseManager:
             database_metadata[name].append((value, type_))
 
         return database_metadata
+    
+    
+    def storm_folders_without_localizations(self):
+        """
+        Retrieves folders where TIFF files exist but have no localization data.
+
+        This function performs a LEFT JOIN between the `metadata` table and the `localizations` table 
+        to find unique folder names where:
+        - The `metadata` name is 'Date' (to ensure we are getting the correct metadata entry).
+        - There is NO matching entry in `localizations` (i.e., `localizations.metadata_id IS NULL`).
+
+        Returns:
+            list: A list of unique folder paths that contain TIFF files but no localization data.
+        """
+        self.cursor.execute("""
+            SELECT DISTINCT m.id AS metadata_id, m.file_name AS folder_path
+            FROM metadata m
+            LEFT JOIN localizations l ON m.id = l.metadata_id
+            WHERE m.name = 'Date' AND l.metadata_id IS NULL
+        """)
+        
+        return self.cursor.fetchall()  # Returns a list of tuples: (metadata_id, folder_path)
+
 
 
     def close(self):
