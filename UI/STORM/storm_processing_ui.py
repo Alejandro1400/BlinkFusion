@@ -2,8 +2,9 @@ import os
 import streamlit as st
 import pandas as pd
 
+from Analysis.STORM.Calculator.time_series_calculator import TimeSeriesCalculator
 from Analysis.STORM.molecule_merging import MoleculeTracker
-from Data_access.database_manager import DatabaseManager
+from Data_access.storm_db import STORMDatabaseManager
 
 class STORMProcessor:
     """
@@ -19,7 +20,7 @@ class STORMProcessor:
             storm_folder (str): Path to the STORM database folder.
         """
         self.storm_folder = storm_folder
-        self.database = DatabaseManager(storm_folder, "storm.db")
+        self.database = STORMDatabaseManager(storm_folder)
 
     def find_unprocessed_files(self):
         """
@@ -140,11 +141,16 @@ class STORMProcessor:
             moltracker = MoleculeTracker(df, 'thunderstorm')
             molecules = moltracker.process_tracks()
 
-            # Save results
-            st.write("Step 3: Saving results...")
+            st.write("Step 3: Saving molecules to database...")
+            self.database.save_molecules(molecules=molecules, metadata_id=metadata_id)
 
-            # Update database
-            self.database.mark_localizations_processed(metadata_id)
+            st.write("Step 4: Computing time series...")
+            total_frames, exposure_time = self.database.get_experiment_settings(metadata_id)
+            time_series_calculator = TimeSeriesCalculator(molecules, interval=50, total_frames=total_frames, exposure_time=exposure_time)
+            time_series_df = time_series_calculator.calculate_time_series_metrics()
+
+            st.write("Step 5: Saving time series to database...")
+            self.database.save_time_series(time_series_df, metadata_id)
 
             file_log.success(f"✅ Processed: {file_name}")
             folder_progress.progress((file_idx + 1) / len(selected_files), text=f"Processed {file_idx + 1} of {len(selected_files)} files.")
