@@ -22,6 +22,7 @@ class LocalizationTracker:
         self.active_tracks = []
         self.completed_tracks = []
         self.track_id_counter = 1
+        self.complete_track_id_counter = 1
         self.time_log = {}
         self.last_frame = 0
         self.actual_frame = 0
@@ -114,7 +115,7 @@ class LocalizationTracker:
                         track.end_frame = track.localizations[-1].frame
                         self.completed_tracks.append(track)
 
-                        self.track_id_counter += 1
+                        self.complete_track_id_counter += 1
                         self.assigned_tracks +=1
                         self.locs_merged += len(track.localizations)
 
@@ -169,6 +170,7 @@ class LocalizationTracker:
                     new_track.start_frame = frame
                     new_track.end_frame = frame
                     self.active_tracks.append(new_track)
+                    self.track_id_counter += 1
 
         return self.completed_tracks
 
