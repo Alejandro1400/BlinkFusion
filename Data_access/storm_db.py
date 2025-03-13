@@ -1,6 +1,8 @@
 import sqlite3
 import os
 
+import pandas as pd
+
 
 class STORMDatabaseManager:
     """Handles database connections and operations for the STORM database."""
@@ -262,6 +264,67 @@ class STORMDatabaseManager:
         exposure_time = metadata_values.get('EXPOSURE', None)
 
         return total_frames, exposure_time
+    
+    def get_metadata(self, filters=None):
+        """
+        Retrieve metadata from the database.
+        
+        If filters are applied, retrieve only matching metadata.
+        If no filters, retrieve all metadata linked to molecules.
+        
+        Args:
+            filters (dict, optional): Column names as keys and list of values as filters.
+
+        Returns:
+            pd.DataFrame: Metadata with unique metadata_id values and filenames.
+        """
+        base_query = """
+            SELECT DISTINCT metadata_id, file_name, name, value
+            FROM metadata
+            WHERE metadata_id IN (SELECT DISTINCT metadata_id FROM molecules)
+        """
+        params = []
+
+        if filters:
+            conditions = []
+            for col, values in filters.items():
+                placeholders = ",".join(["?"] * len(values))
+                conditions.append(f"name = ? AND value IN ({placeholders})")
+                params.append(col)
+                params.extend(values)
+
+            query = f"{base_query} AND ({' OR '.join(conditions)})"
+        else:
+            query = base_query
+
+        df = pd.read_sql_query(query, self.conn, params=params)
+
+        # Pivot data to have one row per metadata_id
+        metadata_df = df.pivot(index=['metadata_id', 'file_name'], columns='name', values='value').reset_index()
+
+        return metadata_df
+    
+    def get_values_by_metadata_id(self, metadata_ids, table_name):
+        """
+        Retrieve values from a specified table based on metadata_id.
+        
+        Args:
+            metadata_ids (list): List of metadata IDs.
+            table_name (str): Name of the table to retrieve data from.
+
+        Returns:
+            pd.DataFrame: Data from the specified table filtered by metadata_id.
+        """
+        if not metadata_ids:
+            return pd.DataFrame()  # Return empty if no metadata_id is provided
+
+        placeholders = ",".join(["?"] * len(metadata_ids))
+        query = f"""
+            SELECT * FROM {table_name}
+            WHERE metadata_id IN ({placeholders})
+        """
+        return pd.read_sql_query(query, self.conn, params=metadata_ids)
+
 
     def close(self):
         """Close the database connection."""
