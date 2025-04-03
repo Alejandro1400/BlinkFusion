@@ -1,17 +1,15 @@
-import time
-from matplotlib import pyplot as plt
+from collections import defaultdict
 import numpy as np
 import streamlit as st
 import pandas as pd
-import os
-import seaborn as sns
 import plotly.express as px
 import plotly.graph_objs as go
 
-from Analysis.STORM.analytics_storm import aggregate_metrics, calculate_frequency, calculate_time_series_metrics, obtain_molecules_metrics
+from Analysis.STORM.Calculator.molecule_metrics import MoleculeMetrics
+from Analysis.STORM.Models.molecule import Molecule
+from Analysis.STORM.Models.track import Track
+from Analysis.STORM.analytics_storm import calculate_frequency
 from Dashboard.graphs import plot_histograms, plot_intensity_vs_frame, plot_time_series_interactive
-from Data_access.file_explorer import find_items, find_valid_folders
-from Data_access.metadata_manager import read_tiff_metadata
 from Data_access.storm_db import STORMDatabaseManager
 
 
@@ -25,9 +23,9 @@ class STORMDashboard:
             storm_folder (str): Path to the STORM database folder.
         """
         self.storm_folder = storm_folder
-        self.database = STORMDatabaseManager(storm_folder)
+        self.database = STORMDatabaseManager()
 
-    @st.cache_data
+
     def load_storm_metadata(self):
         """
         Load distinct metadata from the database where `tag='pulsestorm'`, but only for metadata entries
@@ -38,31 +36,41 @@ class STORMDashboard:
                 - dict: Metadata dictionary where keys are metadata names and values are lists of unique values.
                 - int: Number of files (experiments) that have at least one molecule.
         """
-        # Query to retrieve distinct metadata values, but only for metadata entries with molecules
-        self.database.cursor.execute("""
-            SELECT DISTINCT m.name, m.value
-            FROM metadata m
-            JOIN molecules mol ON m.id = mol.metadata_id
-            ORDER BY m.name, m.value;
-        """)
-        metadata_entries = self.database.cursor.fetchall()
+        # Aggregation pipeline to fetch distinct metadata with molecules
+        pipeline = [
+            {"$match": {
+                "time_series": {"$exists": True, "$ne": []}  # Ensure the experiment has associated time series data
+            }},
+            {"$unwind": "$metadata"},  # Unwind metadata array
+            {"$group": {
+                "_id": "$metadata.name",
+                "uniqueValues": {"$addToSet": "$metadata.value"}
+            }},
+            {"$sort": {"_id": 1}},  # Sort by metadata name
+            {"$facet": {
+                "metadataInfo": [
+                    # Pass all previous grouped data
+                    {"$project": {"_id": 1, "uniqueValues": 1}}
+                ],
+                "count": [
+                    # Count the distinct experiment documents that have time series
+                    {"$count": "numExperimentsWithTimeSeries"}
+                ]
+            }}
+        ]
 
-        database_metadata = {}
-        for name, value in metadata_entries:
-            if name not in database_metadata:
-                database_metadata[name] = []
-            if value not in database_metadata[name]:  # Ensure uniqueness
-                database_metadata[name].append(value)
+        metadata_result = list(self.database.experiments.aggregate(pipeline))
+        
 
-        # Query to count the number of experiments (files) that contain molecules
-        self.database.cursor.execute("""
-            SELECT COUNT(DISTINCT metadata_id)
-            FROM molecules;
-        """)
-        num_experiments_with_molecules = self.database.cursor.fetchone()[0]
+        database_metadata = {item['_id']: item['uniqueValues'] for item in metadata_result[0]['metadataInfo']}
+
+        if metadata_result[0]['count']:
+            num_experiments_with_molecules = metadata_result[0]['count'][0]['numExperimentsWithTimeSeries']
+        else:
+            num_experiments_with_molecules = 0
 
         return database_metadata, num_experiments_with_molecules
-
+    
 
     def run_storm_dashboard_ui(self):
         """
@@ -73,10 +81,7 @@ class STORMDashboard:
         """
 
         # Load unique metadata values and number of experiments with molecules
-        metadata_values, num_experiments = self.database.load_storm_metadata()
-
-        # Display the number of experiments loaded in the dataset
-        st.write(f" **{num_experiments} experiments loaded with molecules.**")
+        metadata_values, num_experiments = self.load_storm_metadata()
 
         with st.expander("Filter Options", expanded=True):
             """
@@ -119,49 +124,59 @@ class STORMDashboard:
             else:
                 metadata_analysis = self.database.get_metadata()
 
-            # Retrieve unique metadata IDs
-            metadata_ids = metadata_analysis["metadata_id"].unique()
+            # Retrieve unique experiment IDs
+            experiment_ids = list(metadata_analysis.keys())  
 
-            # Fetch datasets related to metadata IDs
-            molecules_analysis = self.database.get_values_by_metadata_id(metadata_ids, "molecules")
-            tracks_analysis = self.database.get_values_by_metadata_id(metadata_ids, "tracks")
-            timeseries_analysis = self.database.get_values_by_metadata_id(metadata_ids, "time_series")
+            st.success(f"Number of experiments retrieved: {len(experiment_ids)}")  # Display the count
 
             # Display filtered metadata
             st.markdown("___")
             st.write("### Data after Filtering:")
             st.write("Displaying unique files with their metadata values.")
 
-            # Ensure selected columns include 'file_name' for context
-            display_columns = ["file_name"] + selected_filter_columns if selected_filter_columns else metadata_analysis.columns.tolist()
+            # Ensure selected columns include 'Experiment' (folder path)
+            display_columns = ["Experiment"] + selected_filter_columns if selected_filter_columns else list(metadata_analysis.values())[0].keys()
 
-            # Show filtered metadata
-            if not metadata_analysis.empty:
-                st.dataframe(metadata_analysis[display_columns])
+            # Convert metadata dictionary to DataFrame for display
+            if metadata_analysis:
+                metadata_df = pd.DataFrame.from_dict(metadata_analysis, orient="index")
+                metadata_df.index.name = "Experiment ID"  # Label index for clarity
+
+                # Show filtered metadata
+                st.dataframe(metadata_df[display_columns])
+
+                # Display number of retrieved experiments
+                st.success(f"Loaded {len(metadata_df)} experiment entries.")
             else:
                 st.warning("No data found for the selected filters.")
 
-            # Filter other datasets based on retrieved metadata IDs
-            if metadata_analysis.empty:
-                st.warning("No data available for selected filters.")
-            else:
-                st.success(f"Loaded {len(metadata_analysis)} metadata entries.")
+            # Fetch datasets related to experiment IDs
+            grouped_molecules = self.database.get_grouped_molecules_and_tracks(experiment_ids)
+            # Print experiment IDs from grouped_molecules
+            time_series_dict = self.database.get_grouped_time_series(experiment_ids)
+            # Print experiment IDs from time_series_dict
 
         # Calculate and display metrics
         st.markdown("___")
         st.write("### Metrics and Analysis")
 
         try:
+            molecule_metrics = MoleculeMetrics(grouped_molecules, time_series_dict, metadata_analysis)
             # Obtain molecular metrics based on filtered tracks and timeseries
-            metrics = obtain_molecules_metrics(tracks_analysis, timeseries_analysis, metadata_analysis)
+            metrics = molecule_metrics.obtain_molecules_metrics()
+            metrics_df = pd.DataFrame(metrics)
 
             # Add a column for the number of images and align it at the beginning
-            metrics.insert(0, '# Images', len(metadata_analysis))
-            metrics_columns = metrics.columns.drop('IDENTIFIER')
+            metrics_df.insert(0, '# Images', len(metadata_analysis))
+            metrics_columns = metrics_df.columns.drop('Experiment ID')
+
+            metadata_df = pd.DataFrame.from_dict(metadata_analysis, orient='index').reset_index()
+            metadata_df.rename(columns={'index': 'Experiment ID'}, inplace=True)
 
             # Merge metrics with metadata for context and further analysis
-            if not metrics.empty and not metadata_analysis.empty:
-                metridata = pd.merge(metadata_analysis, metrics, on='IDENTIFIER', how='inner')
+            if not metrics_df.empty and not metadata_df.empty:
+                metridata = pd.merge(metadata_df, metrics_df, on='Experiment ID', how='inner')
+                st.write(metridata)
                 st.write("Metrics successfully calculated and merged with metadata.")
             else:
                 st.warning("No metrics were calculated. Please check your data or filtering criteria.")

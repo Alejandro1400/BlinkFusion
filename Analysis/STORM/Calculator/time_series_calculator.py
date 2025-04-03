@@ -1,6 +1,4 @@
 import pandas as pd
-import numpy as np
-
 
 class TimeSeriesCalculator:
     """Handles computations for time series analysis based on molecules and tracks."""
@@ -22,13 +20,16 @@ class TimeSeriesCalculator:
         self.frame_rate = 1000 / exposure_time
         self.interval_frames = int(interval * self.frame_rate)
 
-
     def calculate_time_series_metrics(self):
+        """Calculates time series metrics and returns a DataFrame."""
 
-        time_series_df = pd.DataFrame(columns=['Duty Cycle', 'Survival Fraction', 'Population Mol', 
-                                               'SC per Mol', 'On Time per SC (s)', 'Intensity per SC (Photons)'])
+        print(f"🔹 Starting Time Series Computation...\n")
+
+        time_series_df = pd.DataFrame(columns=['Start Frame', 'End Frame', 'Duty Cycle', 'Survival Fraction', 'Population Mol', 
+                                           'SC per Mol', 'On Time per SC (s)', 'Intensity per SC (Photons)'])
 
         total_molecules = len(self.molecules)
+
         time_bins = range(0, self.total_frames, self.interval_frames)
 
         for start_bin in time_bins:
@@ -39,10 +40,9 @@ class TimeSeriesCalculator:
             active_molecules = [mol for mol in past_molecules if any(t.end_frame > end_bin for t in mol.tracks)]
             bleached_molecules = [mol for mol in past_molecules if all(t.end_frame <= end_bin for t in mol.tracks)]
 
-            
             survival_fraction = (total_molecules - len(bleached_molecules)) / total_molecules if total_molecules > 0 else 0
             population = len(active_molecules)
-            
+
             # Compute metrics
             total_on_time = 0
             total_possible_time = population * self.interval_frames
@@ -58,7 +58,7 @@ class TimeSeriesCalculator:
                 if relevant_tracks:
                     switching_cycles += len(relevant_tracks)
                     total_tracks += len(relevant_tracks)
-                
+
                 for track in relevant_tracks:
                     adjusted_start = max(track.start_frame, start_bin)
                     adjusted_end = min(track.end_frame, end_bin)
@@ -66,8 +66,6 @@ class TimeSeriesCalculator:
                     total_on_time += on_time
                     total_intensity += max(track.intensity, 0)
 
-                    total_tracks += 1
-            
             # Calculate metrics per molecule or per cycle
             duty_cycle = total_on_time / total_possible_time if total_possible_time > 0 else 0
             on_time_per_sc = total_on_time / total_tracks if total_tracks > 0 else 0
@@ -76,6 +74,6 @@ class TimeSeriesCalculator:
 
             end_bin_seconds = int(end_bin / self.frame_rate)
 
-            time_series_df.loc[end_bin_seconds] = [duty_cycle, survival_fraction, population, sc_per_mol, on_time_per_sc, intensity_per_sc]
+            time_series_df.loc[end_bin_seconds] = [start_bin, end_bin, duty_cycle, survival_fraction, population, sc_per_mol, on_time_per_sc, intensity_per_sc]
 
         return time_series_df

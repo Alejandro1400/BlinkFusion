@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from scipy.spatial import KDTree
 import time
+import streamlit as st
 
 from Analysis.STORM.Models.localization import Localization
 from Analysis.STORM.Models.track import Track
@@ -129,7 +130,7 @@ class LocalizationTracker:
         return assigned_indices
 
 
-    def merge_localizations(self, df: pd.DataFrame) -> list:
+    def merge_localizations(self, df: pd.DataFrame, step_log) -> list:
         """
         Processes localization data frame by frame, tracking movement and forming trajectories.
         
@@ -143,8 +144,11 @@ class LocalizationTracker:
         df['TRACK_ID'] = 0
         df = df.sort_values('FRAME')
 
+        localization_progress = st.progress(0, text="Merging localizations...")
+        total_frames = df['FRAME'].max()
+
         # Step 3: Process frames
-        for frame, frame_data in df.groupby('frame'):
+        for frame, frame_data in df.groupby('FRAME'):
             # Check if the frame is mod 500
             if frame != self.actual_frame and frame % 500 == 0:
                 elapsed_time = time.time() - self.start_time
@@ -153,7 +157,10 @@ class LocalizationTracker:
                 self.actual_frame = frame
                 frame_range = f"{self.last_frame} to {self.actual_frame}"
                 if frame != 0:
-                    print(f"Frame {frame_range} - Localizations Merged: {self.locs_merged} - Assigned tracks: {self.assigned_tracks} - Elapsed time: {elapsed_time:.2f} seconds")
+                    step_log.write(f"🔹 Frame {frame_range}: Localizations: {self.locs_merged}, Tracks: {self.assigned_tracks}, Time: {elapsed_time:.2f} sec")
+
+                localization_progress.progress(frame / total_frames, text=f"Processing frame {frame}/{total_frames}")
+
                 self.time_log[frame_range] = elapsed_time
                 self.locs_merged = 0
                 self.assigned_tracks = 0
@@ -161,7 +168,7 @@ class LocalizationTracker:
             frame_localizations = self.process_frame_data(frame_data)
             kd_tree = KDTree([(loc.x, loc.y) for loc in frame_localizations])
 
-            assigned_indices = self.process_active_tracks(frame_localizations, kd_tree)
+            assigned_indices = self.process_active_tracks(frame_localizations, kd_tree, frame)
 
             for i, loc in enumerate(frame_localizations):
                 if i not in assigned_indices:
@@ -171,7 +178,8 @@ class LocalizationTracker:
                     new_track.end_frame = frame
                     self.active_tracks.append(new_track)
                     self.track_id_counter += 1
-
+        
+        localization_progress.empty()  # Clear progress bar
         return self.completed_tracks
 
 

@@ -6,7 +6,6 @@ import streamlit as st
 class MoleculeMetricsCalculator:
     """Handles computations related to molecule-level metrics."""
 
-    @st.cache_data
     def obtain_molecules_metrics(tracks, time_series, metadata):
         results = []
         
@@ -139,97 +138,6 @@ class MoleculeMetricsCalculator:
         quasi_equilibrium_values = duty_cycles.index[min_index:min_index+5].tolist()
 
         return quasi_equilibrium_values
-
-
-
-def calculate_time_series_metrics(molecules, tracks, interval, total_frames, exposure_time):
-
-    time_series_df = pd.DataFrame(columns=['Duty Cycle', 'Survival Fraction', 'Population Mol', 'SC per Mol', 'On Time per SC (s)', 'Intensity per SC (Photons)'])
-
-    frame_rate = 1000/exposure_time
-    interval_frames = int(interval*frame_rate)
-
-    time_bins = range(0, total_frames, interval_frames)
-
-    # Get the start and end frames for each track
-    start_frame_dict = dict(zip(tracks['TRACK_ID'], tracks['START_FRAME']))
-    end_frame_dict = dict(zip(tracks['TRACK_ID'], tracks['END_FRAME']))
-
-    # Map START_FRAME and END_FRAME for START_TRACK and END_TRACK onto the molecules DataFrame
-    molecules['START_FRAME_start'] = molecules['START_TRACK'].map(start_frame_dict)
-    molecules['END_FRAME_start'] = molecules['START_TRACK'].map(end_frame_dict)
-    molecules['END_FRAME_end'] = molecules['END_TRACK'].map(end_frame_dict) 
-
-    total_molecules = len(molecules)
-
-    for start_bin in time_bins:
-        end_bin = start_bin + interval_frames
-
-        # Filter molecules based on the given criteria
-        past_molecules = molecules[molecules['START_FRAME_start'] <= end_bin]
-
-        active_molecules = past_molecules[past_molecules['END_FRAME_end'] > end_bin]
-        bleached_molecules = past_molecules[past_molecules['END_FRAME_end'] <= end_bin]
-
-        
-        survival_fraction = (total_molecules - len(bleached_molecules)) / total_molecules if total_molecules > 0 else 0
-        population = 0
-
-
-        mol_id_list = active_molecules['MOLECULE_ID'].tolist()
-        
-        total_on_time = 0
-        total_possible_time = len(active_molecules) * interval_frames
-
-        switching_cycles = 0
-        int_per_sc = 0
-
-        total_tracks = 0
-
-        # For each molecule, find relevant tracks
-        for mol_id in mol_id_list:
-            # Find relevant tracks for this molecule
-            relevant_tracks = tracks[(tracks['MOLECULE_ID'] == mol_id) &
-                                    ((tracks['START_FRAME'] <= end_bin) & (tracks['START_FRAME'] >= start_bin) |
-                                    (tracks['END_FRAME'] >= start_bin) & (tracks['END_FRAME'] <= end_bin))]
-            
-            if len(relevant_tracks) > 0:
-                population += 1
-                switching_cycles += len(relevant_tracks) if len(relevant_tracks) > 0 else 0
-            
-            # Calculate on-time for each relevant track
-            for _, track in relevant_tracks.iterrows():
-                # Adjust start and end frame to the bin
-                adjusted_start = max(track['START_FRAME'], start_bin)
-                adjusted_end = min(track['END_FRAME'], end_bin)
-
-                # Calculate the on-time for this track in the bin
-                on_time = adjusted_end - adjusted_start
-
-                total_on_time += on_time
-
-                intensity = track['INTENSITY'] if track['INTENSITY'] > 0 else 0
-                int_per_sc += intensity 
-
-                total_tracks += 1
-        
-        # Calculate duty cycle for the bin
-        if total_possible_time > 0:
-            duty_cycle = total_on_time / total_possible_time if total_possible_time > 0 else 0
-            on_time_per_sc = total_on_time / total_tracks if total_tracks > 0 else 0
-            sc_per_mol = switching_cycles / len(active_molecules) if len(active_molecules) > 0 else 0
-            int_per_sc = int_per_sc / total_tracks if total_tracks > 0 else 0
-        else:
-            duty_cycle = 0
-            on_time_per_sc = 0
-            sc_per_mol = 0
-            int_per_sc = 0
-
-        end_bin_seconds = int(end_bin / frame_rate)
-
-        time_series_df.loc[end_bin_seconds] = [duty_cycle, survival_fraction, population, sc_per_mol, on_time_per_sc, int_per_sc]
-
-    return time_series_df
 
 
 

@@ -2,9 +2,10 @@ import streamlit as st
 from UI.SOAC.filament_dashboard_ui import run_filament_dashboard_ui
 from UI.SOAC.filament_preprocessing_ui import run_filament_preprocessing_ui
 from UI.SOAC.filament_processing_ui import run_filament_processing_ui
-from UI.STORM.storm_processing_ui import run_storm_processing_ui
+from UI.STORM.storm_dashboard_ui import STORMDashboard
+from UI.STORM.storm_processing_ui import STORMProcessor
 from UI.sidebar import setup_sidebar
-from UI.STORM.storm_dashboard_ui import run_storm_dashboard_ui
+#from UI.STORM.storm_dashboard_ui import run_storm_dashboard_ui
 from UI.STORM.storm_preprocessing_ui import run_storm_preprocessing_ui
 from UI.welcome_ui import show_welcome
 
@@ -14,6 +15,7 @@ st.set_page_config(
     page_icon=":microscope:", 
     layout="wide"
 )
+
 
 def display_content():
     """
@@ -31,7 +33,6 @@ def display_content():
 
         # Analysis sections
         elif "Analysis" in selected_option:
-            try:
                 section, operation = selected_option.split(' - ')
                 st.title(f"{section} {operation}")
 
@@ -67,20 +68,20 @@ def display_content():
                             st.error("STORM database folder not set. Please configure it in the sidebar.")
                     elif operation == "Batch Processing":
                         if 'storm_database_folder' in st.session_state:
-                            run_storm_processing_ui(st.session_state.storm_database_folder)
+                            storm_proc = STORMProcessor(st.session_state.storm_database_folder)
+                            storm_proc.run_processing_ui()
                         else:
                             st.error("STORM database folder not set. Please configure it in the sidebar.")
                     elif operation == "Dashboard":
                         if 'storm_database_folder' in st.session_state:
-                            run_storm_dashboard_ui(st.session_state.storm_database_folder)
+                            storm_dash = STORMDashboard(st.session_state.storm_database_folder)
+                            storm_dash.run_storm_dashboard_ui()
                         else:
                             st.error("STORM database folder not set. Please configure it in the sidebar.")
                     else:
                         st.warning(f"Operation '{operation}' is not yet implemented for STORM Analysis.")
                 else:
                     st.error(f"Unrecognized section: '{section}'")
-            except ValueError:
-                st.error("Invalid option format. Please select a valid option from the sidebar.")
     else:
         st.subheader("Select a category from the sidebar to get started.")
 

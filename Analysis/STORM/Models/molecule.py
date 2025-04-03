@@ -1,13 +1,30 @@
+import uuid
 import numpy as np
 
 class Molecule:
-    def __init__(self, molecule_id):
-        self.molecule_id = int(molecule_id)
-        self.tracks = []
-        self.start_track = None
-        self.end_track = None
-        self.total_on_time = 0
-        self.num_tracks = 0
+    def __init__(
+        self, molecule_id=uuid.uuid4().hex, experiment_id=0, start_track=None, end_track=None, 
+        total_on_time=0, num_tracks=0, tracks=None
+    ):
+        """
+        Initializes a Molecule object.
+
+        Args:
+            molecule_id (int): Unique molecule identifier.
+            experiment_id (int): ID of the associated experiment.
+            start_track (int, optional): Start track ID.
+            end_track (int, optional): End track ID.
+            total_on_time (float, optional): Total on-time of the molecule.
+            num_tracks (int, optional): Number of tracks assigned to this molecule.
+            tracks (list, optional): List of Track objects assigned to this molecule.
+        """
+        self.molecule_id = molecule_id
+        self.experiment_id = experiment_id
+        self.start_track = start_track
+        self.end_track = end_track
+        self.total_on_time = total_on_time
+        self.num_tracks = num_tracks
+        self.tracks = tracks if tracks is not None else []
 
     def add_track(self, track):
         """Add a track to the molecule and update properties."""
@@ -32,3 +49,14 @@ class Molecule:
 
     def __repr__(self):
         return f"Molecule(ID={self.molecule_id}, Tracks={len(self.tracks)}, Total On Time={self.total_on_time})"
+    
+    def to_dict(self):
+        return {
+            "molecule_id": self.molecule_id,
+            "experiment_id": self.experiment_id,
+            "start_track": self.start_track,
+            "end_track": self.end_track,
+            "total_on_time": self.total_on_time,
+            "num_tracks": self.num_tracks,
+            "tracks": [track.to_dict() for track in self.tracks]
+        }

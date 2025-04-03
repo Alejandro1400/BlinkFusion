@@ -1,334 +1,419 @@
-import sqlite3
-import os
+from collections import defaultdict
+import time
+from urllib.parse import quote_plus
+import uuid
+import streamlit as st
 
 import pandas as pd
+from pymongo import ASCENDING, MongoClient
+
+from Analysis.STORM.Models.molecule import Molecule
+from Analysis.STORM.Models.track import Track
 
 
 class STORMDatabaseManager:
     """Handles database connections and operations for the STORM database."""
 
-    def __init__(self, database_folder, db_name="storm.db"):
+    def __init__(self, username="myadmin", password="Password123!", host='localhost', port=27017, database_name="storm_db"):
         """
-        Initialize the STORMDatabaseManager with a base folder and database name.
+        Initialize the STORMDatabaseManager with MongoDB connection details.
 
         Args:
-            database_folder (str): The path to the folder where the database will be stored.
-            db_name (str): The name of the database file (default: 'storm.db').
+            username (str): Username for MongoDB authentication.
+            password (str): Password for MongoDB authentication.
+            host (str): Host address of the MongoDB server.
+            port (int): Port number of the MongoDB server.
+            database_name (str): The name of the MongoDB database.
         """
-        self.db_path = os.path.join(database_folder, db_name)
-        self.conn = self.connect()
-        self.cursor = self.conn.cursor()
-
-    def connect(self):
-        """Establish and return a SQLite connection."""
-        return sqlite3.connect(self.db_path)
+        if username and password:
+            uri = f"mongodb://{quote_plus(username)}:{quote_plus(password)}@{host}:{port}"
+        else:
+            uri = f"mongodb://{host}:{port}"
+        
+        self.client = MongoClient(uri)
+        self.db = self.client[database_name]
+        self.initialize_database()
 
     def initialize_database(self):
-        """Initialize tables for the STORM database."""
-        self.cursor.executescript("""
-            CREATE TABLE IF NOT EXISTS metadata (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                file_name TEXT NOT NULL,
-                date TEXT NOT NULL,
-                tag TEXT NOT NULL,
-                name TEXT NOT NULL,
-                type TEXT NOT NULL,
-                value TEXT
-            );
+        """Initialize collections and indexes for the STORM database."""
+        # Create collections if they do not exist and define indexes
+        self.experiments = self.db['experiments']
+        self.molecules = self.db['molecules']
+        self.localizations = self.db['localizations']
 
-            CREATE TABLE IF NOT EXISTS localizations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                frame INTEGER NOT NULL,
-                x REAL NOT NULL,
-                y REAL NOT NULL,
-                sigma REAL NOT NULL,
-                intensity REAL NOT NULL,
-                offset REAL NOT NULL,
-                bkgstd REAL NOT NULL,
-                uncertainty REAL NOT NULL,
-                track_id INTEGER,
-                metadata_id INTEGER,
-                FOREIGN KEY(track_id) REFERENCES tracks(id),
-                FOREIGN KEY(metadata_id) REFERENCES metadata(id)
-            );
+        # Indexes for Experiments collection
+        self.experiments.create_index([("date", ASCENDING)])
+        self.experiments.create_index([("file_name", ASCENDING)])
 
-            CREATE TABLE IF NOT EXISTS tracks (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                x REAL,
-                y REAL,
-                z REAL,
-                start_frame INTEGER,
-                end_frame INTEGER,
-                intensity REAL,
-                offset REAL,
-                bkgstd REAL,
-                uncertainty REAL,
-                gaps INTEGER,
-                on_time REAL,
-                off_time REAL,
-                molecule_id INTEGER,
-                metadata_id INTEGER,
-                FOREIGN KEY(molecule_id) REFERENCES molecules(molecule_id),
-                FOREIGN KEY(metadata_id) REFERENCES metadata(id)
-            );
+        # Indexes for Molecules collection
+        self.molecules.create_index([("experiment_id", ASCENDING)])
 
-            CREATE TABLE IF NOT EXISTS molecules (
-                molecule_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                start_track INTEGER,
-                end_track INTEGER,
-                num_tracks INTEGER,
-                total_on_time REAL,
-                metadata_id INTEGER,
-                FOREIGN KEY(metadata_id) REFERENCES metadata(id)
-            );
+        # Indexes for Localizations collection
+        self.localizations.create_index([("track_id", ASCENDING)])
 
-            CREATE TABLE IF NOT EXISTS time_series (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                duty_cycle REAL,
-                survival_fraction REAL,
-                population_mol INTEGER,
-                sc_per_mol REAL,
-                on_time_per_sc REAL,
-                start_frame INTEGER,
-                end_frame INTEGER,
-                metadata_id INTEGER,
-                FOREIGN KEY(metadata_id) REFERENCES metadata(id)
-            );
-        """)
-        self.conn.commit()
 
-    def save_metadata(self, metadata, file_name):
+    def save_metadata(self, metadata, file_name, folder_path):
         """
-        Save extracted metadata to the database, including the `tag` field.
+        Save experiment and extracted metadata to the MongoDB database.
 
         Args:
-            metadata (list of dicts): List of metadata dictionaries with keys: id, type, value.
+            metadata (list of dicts): List of metadata dictionaries with keys: 'id', 'type', 'value', 'tag'.
             file_name (str): The name of the file associated with the metadata.
+            folder_path (str): The relative folder path where the experiment is stored.
         """
-        date_value = next((entry['value'] for entry in metadata if entry['id'] == 'Date'), "Unknown")
+        # Generate a unique UUID for the experiment ID
+        experiment_id = uuid.uuid4().hex
+        # Extract 'Date' from metadata
+        date_value = next((entry['value'] for entry in metadata if entry['tag'] == 'Date'), "Unknown")
 
-        self.cursor.executemany("""
-            INSERT INTO metadata (file_name, date, tag, name, type, value)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, [(file_name, date_value, item['tag'], item['id'], item['type'], item['value']) for item in metadata])
+        # Prepare the experiment document with embedded metadata
+        experiment_document = {
+            "_id": experiment_id,
+            "file_name": file_name,
+            "folder_path": folder_path,
+            "date": date_value,
+            "metadata": [
+                {
+                    "tag": item['tag'],
+                    "name": item.get('id', ''),  # Adjusted for the key used in MongoDB document
+                    "type": item['type'],
+                    "value": item['value']
+                }
+                for item in metadata
+            ]
+        }
 
-        self.conn.commit()
+        # Insert the experiment document into the 'experiments' collection and return the inserted_id
+        result = self.experiments.insert_one(experiment_document)
+        return result.inserted_id
 
     def load_storm_metadata(self):
         """
-        Load distinct metadata from the database where `tag='PulseSTORM'`.
+        Load distinct metadata from the MongoDB database where `tag='PulseSTORM'`.
 
         Returns:
             dict: Metadata dictionary where keys are metadata names and values are lists of tuples (value, type).
         """
-        self.cursor.execute("""
-            SELECT DISTINCT name, value, type 
-            FROM metadata 
-            WHERE tag = 'pulsestorm'
-            ORDER BY name, value;
-        """)
-        metadata_entries = self.cursor.fetchall()
+        pipeline = [
+            {"$unwind": "$metadata"},  # Unwind the metadata array to process each item separately
+            {"$match": {"metadata.tag": "pulsestorm"}},  # Match documents where metadata tag is 'PulseSTORM'
+            {"$group": {  # Group to collect unique metadata
+                "_id": {"name": "$metadata.name", "value": "$metadata.value", "type": "$metadata.type"},
+                "uniqueValues": {"$addToSet": {"value": "$metadata.value", "type": "$metadata.type"}}
+            }},
+            {"$sort": {"_id.name": 1, "_id.value": 1}}  # Sort results by name and value
+        ]
 
+        results = self.experiments.aggregate(pipeline)
+
+        # Organize the results into the desired dictionary format
         database_metadata = {}
-        for name, value, type_ in metadata_entries:
+        for result in results:
+            name = result['_id']['name']
+            entries = result['uniqueValues']
             if name not in database_metadata:
                 database_metadata[name] = []
-            database_metadata[name].append((value, type_))
+            for entry in entries:
+                database_metadata[name].append((entry['value'], entry['type']))
 
         return database_metadata
 
     def storm_folders_without_localizations(self):
         """
-        Retrieves folders where TIFF files exist but have no localization data.
+        Retrieves experiments where TIFF files exist but have no associated molecule data,
+        indicating that there are no localizations linked to these experiments.
 
         Returns:
-            list: A list of unique folder paths that contain TIFF files but no localization data.
+            list: A list of unique (experiment_id, folder_path) dictionaries where no localizations exist.
         """
-        self.cursor.execute("""
-            SELECT DISTINCT m.id AS metadata_id, m.file_name AS folder_path
-            FROM metadata m
-            LEFT JOIN localizations l ON m.id = l.metadata_id
-            WHERE m.name = 'Date' AND l.metadata_id IS NULL
-        """)
-        
-        return self.cursor.fetchall()  # Returns a list of tuples: (metadata_id, folder_path)
+        pipeline = [
+            {
+                "$match": {
+                    "time_series": {"$exists": False}  # Check for experiments where 'time_series' field does not exist or is empty
+                }
+            },
+            {
+                "$project": {
+                    "experiment_id": "$_id",  # Project the _id as experiment_id
+                    "folder_path": 1,  # Include folder_path in the output
+                    "_id": 0  # Exclude the default _id field
+                }
+            }
+        ]
+
+        results = self.experiments.aggregate(pipeline)
+        return list(results)  # Convert cursor to list
+
     
 
-    def save_molecules(self, molecules, metadata_id):
-        """
-        Saves molecules, tracks, and localizations to the database in an optimized manner.
-
-        Args:
-            molecules (list[Molecule]): List of Molecule objects.
-            metadata_id (int): Metadata ID linking these entries.
-        """
-
-        # Prepare bulk insert lists
-        molecule_data = []
-        track_data = []
-        localization_data = []
+    def save_molecules(self, molecules, experiment_id):
+        # Prepare data for molecules and localizations
+        molecule_documents = []
+        localization_documents = []
 
         for molecule in molecules:
-            # 1️⃣ Molecule Data
-            molecule_data.append((
-                molecule.molecule_id, molecule.start_track, molecule.end_track,
-                molecule.num_tracks, molecule.total_on_time, metadata_id
-            ))
-
+            molecule_dict = molecule.to_dict()  # Ensure localizations are not included
+            molecule_dict['experiment_id'] = experiment_id
             for track in molecule.tracks:
-                # 2️⃣ Track Data
-                track_data.append((
-                    track.track_id, track.x, track.y, 0,  # z is defaulted to 0
-                    track.start_frame, track.end_frame, track.intensity,
-                    track.offset, track.bkgstd, track.uncertainty,
-                    len(track.gaps), track.on_time, track.off_time,
-                    molecule.molecule_id, metadata_id
-                ))
+                # Append track without localizations
+                track_dict = track.to_dict(embed_localizations=False)  # Do not embed localizations
+                molecule_dict['tracks'].append(track_dict)
 
                 for loc in track.localizations:
-                    # 3️⃣ Localization Data
-                    localization_data.append((
-                        loc.id, loc.frame, loc.x, loc.y, loc.sigma, loc.intensity,
-                        loc.offset, loc.bkgstd, loc.uncertainty, track.track_id, metadata_id
-                    ))
+                    loc_dict = loc.to_dict()
+                    loc_dict['track_id'] = track.track_id
+                    localization_documents.append(loc_dict)
+            
+            molecule_documents.append(molecule_dict)
 
-        # Execute batch insertions
-        try:
-            self.cursor.executemany("""
-                INSERT INTO molecules (molecule_id, start_track, end_track, num_tracks, total_on_time, metadata_id)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, molecule_data)
+        # Insert molecules with embedded tracks (without localizations)
+        if molecule_documents:
+            self.molecules.insert_many(molecule_documents)
+        # Insert localizations separately
+        if localization_documents:
+            self.localizations.insert_many(localization_documents)
+            
 
-            self.cursor.executemany("""
-                INSERT INTO tracks (id, x, y, z, start_frame, end_frame, intensity, offset, bkgstd, uncertainty,
-                                   gaps, on_time, off_time, molecule_id, metadata_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, track_data)
-
-            self.cursor.executemany("""
-                INSERT INTO localizations (id, frame, x, y, sigma, intensity, offset, bkgstd, uncertainty, track_id, metadata_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, localization_data)
-
-            self.conn.commit()
-            print(f"✅ Successfully inserted {len(molecule_data)} molecules, {len(track_data)} tracks, and {len(localization_data)} localizations.")
-
-        except sqlite3.Error as e:
-            self.conn.rollback()
-            print(f"❌ Database error: {e}")
-
-    def save_time_series(self, time_series_df, metadata_id, interval_frames):
+    def save_time_series(self, time_series_df, experiment_id):
         """
-        Saves time series data to the database.
+        Saves time series data to the MongoDB database by appending it to the existing experiment document.
 
         Args:
             time_series_df (pd.DataFrame): DataFrame containing time-series metrics.
-            metadata_id (int): ID referencing the metadata record.
+            experiment_id (ObjectId or str): ID referencing the experiment record.
         """
-        # Convert DataFrame to list of tuples for bulk insertion
-        time_series_data = [
-            (row['Duty Cycle'], row['Survival Fraction'], row['Population Mol'],
-            row['SC per Mol'], row['On Time per SC (s)'], int(index), int(index + interval_frames), metadata_id)
-            for index, row in time_series_df.iterrows()
-        ]
+        # Convert DataFrame to a list of dictionaries (more suitable for MongoDB updates)
+        time_series_data = time_series_df.to_dict('records')  # Convert entire DataFrame to a list of dictionaries
 
-        # Bulk insert into database
-        self.cursor.executemany("""
-            INSERT INTO time_series (duty_cycle, survival_fraction, population_mol, 
-                                    sc_per_mol, on_time_per_sc, start_frame, end_frame, metadata_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, time_series_data)
+        # Update the experiment document by appending each time series record to the 'time_series' array
+        for time_series_entry in time_series_data:
+            self.experiments.update_one(
+                {"_id": experiment_id},
+                {"$push": {"time_series": time_series_entry}}
+            )
 
-        self.conn.commit()
-        print(f"✅ Successfully inserted {len(time_series_data)} time series records.")
 
-    def get_experiment_settings(self, metadata_id):
+    def get_experiment_settings(self, experiment_id):
         """
-        Retrieves total frames and exposure time from metadata where the root tag is 'czi pulsestorm'.
+        Retrieves total frames and exposure time from experiment metadata where the tag is 'czi-pulsestorm'.
 
         Args:
-            metadata_id (int): The metadata ID to query.
+            experiment_id (ObjectId or str): The experiment ID to query.
 
         Returns:
             tuple: (total_frames, exposure_time) or (None, None) if not found.
         """
-        self.cursor.execute("""
-            SELECT name, value FROM metadata
-            WHERE metadata_id = ? AND tag = 'czi-pulsestorm' AND name IN ('FRAMES', 'EXPOSURE')
-            """, (metadata_id,))
-        
-        # Fetch and store results in a dictionary
-        metadata_values = {row[0]: float(row[1]) for row in self.cursor.fetchall()}
-        
-        total_frames = metadata_values.get('FRAMES', None)
-        exposure_time = metadata_values.get('EXPOSURE', None)
+        pipeline = [
+            {"$match": {"_id": experiment_id}},  # Match the experiment by ID
+            {"$unwind": "$metadata"},  # Unwind the metadata array to process each item separately
+            {"$match": {
+                "metadata.tag": "czi-pulsestorm",
+                "metadata.name": {"$in": ["Frames", "Exposure"]}  # Match specific metadata entries
+            }},
+            {"$project": {  # Project to format the output
+                "name": "$metadata.name",
+                "value": "$metadata.value"
+            }}
+        ]
+
+        results = list(self.experiments.aggregate(pipeline))
+        metadata_values = {result['name']: float(result['value']) for result in results if isinstance(result['value'], (int, float))}
+
+        total_frames = int(metadata_values.get('Frames', 0)) if 'Frames' in metadata_values else None
+        exposure_time = int(metadata_values.get('Exposure', 0)) if 'Exposure' in metadata_values else None
 
         return total_frames, exposure_time
+
+    
     
     def get_metadata(self, filters=None):
         """
-        Retrieve metadata from the database.
-        
-        If filters are applied, retrieve only matching metadata.
-        If no filters, retrieve all metadata linked to molecules.
-        
+        Retrieve metadata from the MongoDB database.
+
         Args:
             filters (dict, optional): Column names as keys and list of values as filters.
 
         Returns:
-            pd.DataFrame: Metadata with unique metadata_id values and filenames.
+            dict: A dictionary where each experiment_id has its metadata assigned as {name: value}.
         """
-        base_query = """
-            SELECT DISTINCT metadata_id, file_name, name, value
-            FROM metadata
-            WHERE metadata_id IN (SELECT DISTINCT metadata_id FROM molecules)
-        """
-        params = []
-
-        if filters:
-            conditions = []
-            for col, values in filters.items():
-                placeholders = ",".join(["?"] * len(values))
-                conditions.append(f"name = ? AND value IN ({placeholders})")
-                params.append(col)
-                params.extend(values)
-
-            query = f"{base_query} AND ({' OR '.join(conditions)})"
-        else:
-            query = base_query
-
-        df = pd.read_sql_query(query, self.conn, params=params)
-
-        # Pivot data to have one row per metadata_id
-        metadata_df = df.pivot(index=['metadata_id', 'file_name'], columns='name', values='value').reset_index()
-
-        return metadata_df
+        pipeline = [
+            {"$match": {"time_series": {"$exists": True, "$ne": []}}}  # Only consider experiments with time_series data
+        ]
     
-    def get_values_by_metadata_id(self, metadata_ids, table_name):
+
+        # Applying dynamic filters based on input
+        if filters:
+            for name, values in filters.items():
+                pipeline.append({"$match": {
+                    f"metadata.name": name,
+                    f"metadata.value": {"$in": values}
+                }})
+
+        # Unwind metadata for processing
+        pipeline.append({"$unwind": "$metadata"})
+
+        # Group to assemble metadata per experiment
+        pipeline.append({
+            "$group": {
+                "_id": "$_id",
+                "folder_path": {"$first": "$folder_path"},
+                "metadata": {
+                    "$push": {
+                        "name": "$metadata.name",
+                        "value": "$metadata.value",
+                        "type": "$metadata.type"
+                    }
+                }
+            }
+        })
+
+        results = list(self.experiments.aggregate(pipeline))
+
+        # Dictionary to store results
+        metadata_dict = {}
+        for result in results:
+            exp_id = str(result["_id"])
+            metadata_dict[exp_id] = {"Experiment": result["folder_path"]}
+
+            for meta in result["metadata"]:
+                prop_name = meta["name"]
+                prop_type = meta["type"]
+                prop_value = meta["value"]
+
+                # Convert value based on type
+                if prop_type == 'int':
+                    converted_value = int(prop_value)
+                elif prop_type == 'float':
+                    converted_value = float(prop_value)
+                elif prop_type == 'bool':
+                    converted_value = prop_value.lower() in ('true', '1', 't')
+                else:
+                    converted_value = str(prop_value)  # Default to string
+
+                metadata_dict[exp_id][prop_name] = converted_value
+
+        return metadata_dict
+    
+
+    def get_grouped_molecules_and_tracks(self, experiment_ids):
         """
-        Retrieve values from a specified table based on metadata_id.
+        Retrieves and groups molecules with their associated tracks for the given experiment IDs.
         
         Args:
-            metadata_ids (list): List of metadata IDs.
-            table_name (str): Name of the table to retrieve data from.
+            experiment_ids (list): List of experiment IDs.
+        
+        Returns:
+            dict: A dictionary with experiment IDs as keys and lists of Molecule objects as values.
+        """
+        # Fetch all molecules for the specified experiment IDs
+        query_result = list(self.molecules.find({"experiment_id": {"$in": experiment_ids}}))
+        total_documents = len(query_result)
+        
+        if total_documents == 0:
+            return {}
+        
+        grouped_molecules = defaultdict(list)
+        
+        # Setup for progress bar
+        progress_bar = st.progress(0)
+        start_time = time.time()
+        update_interval = 500  # Update progress every 500 molecules
+        step_log = st.empty()
+
+        # Processing molecules
+        for index, doc in enumerate(query_result):
+            if (index + 1) % update_interval == 0 or index + 1 == total_documents:
+                # Update the progress bar and log
+                current_time = time.time()
+                elapsed_time = current_time - start_time
+                remaining_docs = total_documents - index - 1
+                percent_complete = (index + 1) / total_documents
+                progress_bar.progress(percent_complete)
+                estimated_total_time = elapsed_time / (index + 1) * total_documents
+                estimated_remaining_time = estimated_total_time - elapsed_time
+                step_log.write(f"Processed {index + 1}/{total_documents} molecules in {elapsed_time:.2f} seconds. "
+                            f"Estimated time remaining: {estimated_remaining_time / 60:.2f} minutes.")
+            
+            exp_id = doc["experiment_id"]
+            tracks = [
+                Track(
+                    track_id=track["id"],
+                    start_frame=track.get("start_frame"),
+                    end_frame=track.get("end_frame"),
+                    intensity=track.get("intensity"),
+                    offset=track.get("offset"),
+                    bkgstd=track.get("bkgstd"),
+                    uncertainty=track.get("uncertainty"),
+                    on_time=track.get("on_time"),
+                    off_time=track.get("off_time"),
+                    x=track.get("x"),
+                    y=track.get("y"),
+                    molecule_id=doc["_id"]
+                )
+                for track in doc.get("tracks", [])
+            ]
+            
+            molecule = Molecule(
+                molecule_id=doc["_id"],
+                experiment_id=exp_id,
+                start_track=doc.get("start_track"),
+                end_track=doc.get("end_track"),
+                total_on_time=doc.get("total_on_time"),
+                num_tracks=len(tracks),
+                tracks=tracks
+            )
+            
+            grouped_molecules[exp_id].append(molecule)
+        
+        # Final update
+        progress_bar.progress(1.0)
+        total_time = time.time() - start_time
+        step_log.write(f"Completed obtaining {total_documents} molecules in {total_time:.2f} seconds.")
+        progress_bar.empty()  # Remove the progress bar widget after completion
+
+        return grouped_molecules
+
+
+    
+    def get_grouped_time_series(self, experiment_ids):
+        """
+        Retrieves and groups time-series data for given experiment IDs.
+
+        Args:
+            experiment_ids (list): List of experiment IDs.
 
         Returns:
-            pd.DataFrame: Data from the specified table filtered by metadata_id.
+            dict: {experiment_id: DataFrame of time-series values}
         """
-        if not metadata_ids:
-            return pd.DataFrame()  # Return empty if no metadata_id is provided
+        if not experiment_ids:
+            return {}
 
-        placeholders = ",".join(["?"] * len(metadata_ids))
-        query = f"""
-            SELECT * FROM {table_name}
-            WHERE metadata_id IN ({placeholders})
-        """
-        return pd.read_sql_query(query, self.conn, params=metadata_ids)
+        # Use MongoDB's aggregation framework to filter and project time series data
+        pipeline = [
+            {"$match": {
+                "_id": {"$in": experiment_ids}
+            }},
+            {"$project": {
+                "time_series": 1,
+                "_id": 1
+            }}
+        ]
 
+        query_result = self.experiments.aggregate(pipeline)
+        time_series_dict = {}
 
-    def close(self):
-        """Close the database connection."""
-        self.conn.close()
+        # Iterate through the aggregation results
+        for doc in query_result:
+            experiment_id = doc["_id"]
+            # If time_series data exists, convert it to DataFrame, otherwise create an empty DataFrame
+            if 'time_series' in doc:
+                df = pd.DataFrame(doc['time_series'])
+            else:
+                df = pd.DataFrame()
+            
+            time_series_dict[experiment_id] = df
+
+        return time_series_dict
 
 
 if __name__ == "__main__":

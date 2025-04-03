@@ -1,10 +1,10 @@
-import time
+import streamlit as st
 import numpy as np
 import pandas as pd
 from scipy.spatial import KDTree
 
 from Analysis.STORM.Models.molecule import Molecule
-from Analysis.STORM.localization_tracker import LocalizationTracker, merge_localizations
+from Analysis.STORM.localization_tracker import LocalizationTracker
 from Analysis.STORM.preprocessing import Preprocessor
 
 
@@ -23,7 +23,7 @@ class MoleculeTracker:
         """
         self.df = df
         self.file_type = file_type
-        self.tracking_events = None
+        self.tracks = None
         self.max_distance = max_distance
         self.molecules = []
         self.molecule_id_counter = 1
@@ -130,13 +130,13 @@ class MoleculeTracker:
         Adds ON_TIME and OFF_TIME for tracking events, considering only tracks within the same molecule.
         """
         # Calculate ON_TIME for each tracking event
-        for track in self.tracking_events:
+        for track in self.tracks:
             track.on_time = track.end_frame - track.start_frame + 1
             track.off_time = 0  # Default to 0, will be updated below
 
-        # Group tracking_events by molecule ID
+        # Group tracks by molecule ID
         molecule_groups = {}
-        for track in self.tracking_events:
+        for track in self.tracks:
             if track.molecule_id not in molecule_groups:
                 molecule_groups[track.molecule_id] = []
             molecule_groups[track.molecule_id].append(track)
@@ -166,32 +166,35 @@ class MoleculeTracker:
         self.molecules = list(molecule_dict.values())
 
 
-    def process_tracks(self):
+    def process_tracks(self, step_log):
         """ Process the entire file and merge tracking events. """
 
         if self.file_type == 'trackmate':
             # Prepare the columns
             preprocessor = Preprocessor(self.df, self.file_type)
             self.raw_localizations = preprocessor.prepare_columns()
-            self.tracking_events = preprocessor.create_tracking_events()
+            self.tracks = preprocessor.create_tracking_events()
         elif self.file_type == 'thunderstorm':
             locstracker = LocalizationTracker()
-            self.tracking_events = locstracker.merge_localizations(self.df)
+            step_log.write("🔄 Step 2.1: Converting localizations into tracks...")
+            self.tracks = locstracker.merge_localizations(self.df, step_log)
 
         # Merge molecules
+        step_log.write("🔄 Step 2.2: Assigning molecule IDs to tracking events...")
         self.merge_tracking_events()
 
         # Update localizations
+        step_log.write("🔄 Step 2.3: Merging close tracking events...")
         self.update_merged_locs()
 
         # Calculate blinking times
+        step_log.write("🔄 Step 2.4: Calculating track blinking times...")
         self.track_blinking_times()
 
         # Create molecules
-        self.create_molecules()
-        
-        # Determine photobleaching
-        #molecules = bleaching_identification(molecules, blink_tracking_events)
+        step_log.write("🔄 Step 2.5: Creating molecules...")
+        self.create_molecules()  
 
+        step_log.write("✅ Step 2: Molecule generation complete.")
         return self.molecules
 

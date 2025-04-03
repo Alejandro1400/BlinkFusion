@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import streamlit as st
 
-from Data_access.database_manager import DatabaseManager
+from Data_access.storm_db import STORMDatabaseManager
 from Data_access.file_explorer import find_items
 from Data_access.metadata_manager import (
     aggregate_metadata_info, czi_2_tiff, extract_values_from_title
@@ -15,14 +15,8 @@ def load_storm_metadata(database_folder, reload_trigger):
     """
     Load metadata from the STORM database using the DatabaseManager class.
     """
-    storm_db = DatabaseManager(database_folder, "storm.db")  # Initialize DB manager
-
-    with st.status("Loading metadata from database...", expanded=True) as status:
-        status.update(label="Fetching unique metadata entries...", state="running")
-        database_metadata = storm_db.load_storm_metadata()  # Fetch metadata from DB
-        status.update(label="Metadata loaded successfully!", state="complete")
-
-    storm_db.close()  # Close connection
+    storm_db = STORMDatabaseManager()  # Initialize DB manager
+    database_metadata = storm_db.load_storm_metadata()  # Fetch metadata from DB
     return database_metadata
 
 
@@ -35,7 +29,7 @@ def save_metadata_to_database(database_folder, all_files_metadata, formatted_met
         all_files_metadata (dict): Dictionary containing file paths as keys and extracted metadata as values.
         formatted_metadata (list): List of metadata that was selected in the UI.
     """
-    storm_db = DatabaseManager(database_folder, "storm.db")  # Initialize DB Manager
+    storm_db = STORMDatabaseManager()  # Initialize DB Manager
     progress_placeholder = st.empty()  # Placeholder for progress messages
 
     for index, (file, metadata) in enumerate(all_files_metadata.items(), start=1):
@@ -55,9 +49,11 @@ def save_metadata_to_database(database_folder, all_files_metadata, formatted_met
             # Extract relative folder path (removing database folder)
             relative_folder_path = os.path.relpath(final_folder_path, database_folder)
 
+            file_name = os.path.basename(final_folder_path)  # Update file name with new TIFF name
+
             # Step 3: Saving metadata to the database
             progress_placeholder.write(f"💾 **Saving metadata for `{file_name}` into the database...**")
-            storm_db.save_metadata(combined_metadata, relative_folder_path)
+            storm_db.save_metadata(combined_metadata, file_name, relative_folder_path)
 
             # Step 4: Success message
             progress_placeholder.success(f"✅ `{file_name}` successfully uploaded and metadata stored!")
@@ -66,7 +62,6 @@ def save_metadata_to_database(database_folder, all_files_metadata, formatted_met
             progress_placeholder.error(f"❌ Failed to process `{file_name}`. Error: {e}")
             continue
 
-    storm_db.close()  # Close connection after all uploads
     reload_metadata()  # Refresh UI to reflect changes
 
 
