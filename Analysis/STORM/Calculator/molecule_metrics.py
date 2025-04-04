@@ -106,10 +106,6 @@ class MoleculeMetrics:
             earliest_start_time = quasi_equilibrium_data['Start Frame'].iloc[0] if not quasi_equilibrium_data.empty else None
             latest_end_time = quasi_equilibrium_data['End Frame'].iloc[-1] if not quasi_equilibrium_data.empty else None
 
-            print(earliest_start_time, latest_end_time)
-
-
-
             # Filter molecules based on quasi-equilibrium time
             quasi_equilibrium_molecules = [
                 mol for mol in molecules if (any(
@@ -129,6 +125,11 @@ class MoleculeMetrics:
             qe_photons_mol = sum(
                 sum(track.intensity for track in mol.tracks) for mol in quasi_equilibrium_molecules
             ) / len(quasi_equilibrium_molecules) if quasi_equilibrium_molecules else 0
+
+            qe_photons_track = (
+                sum(track.intensity for mol in quasi_equilibrium_molecules for track in mol.tracks) /
+                sum(len(mol.tracks) for mol in quasi_equilibrium_molecules)
+            ) if quasi_equilibrium_molecules and any(mol.tracks for mol in quasi_equilibrium_molecules) else 0
             
 
             qe_switching_cycles = sum(
@@ -153,7 +154,6 @@ class MoleculeMetrics:
             metrics_dict = {
                 'Experiment ID': experiment_id,
                 'Population Mol': population,
-                'QE DC Population': qe_dc_population,
                 'QE Active Population': len(quasi_equilibrium_molecules),
                 'QE Duty Cycle': qe_duty_cycle,
                 'QE Survival Fraction': qe_survival_fraction,
@@ -161,6 +161,8 @@ class MoleculeMetrics:
                 'Int. per Mol (Photons)': intensity_mol,
                 'Int. per SC (Photons)': intensity_sc,
                 'QE Int. per Mol (Photons)': qe_photons_mol,
+                'QE Int. per SC (Photons)': qe_photons_track,
+                'SC per Mol': switching_cycles_mol,
                 'QE SC per Mol': qe_switching_cycles,
                 'On Time per SC (s)': on_time,
                 'QE On Time per SC (s)': qe_on_time,
@@ -184,15 +186,21 @@ class MoleculeMetrics:
         """
         aggregation = {
             'Population Mol': 'sum',
-            'QE DC Population': 'sum',
             'QE Active Population': 'sum',
-            'QE Duty Cycle': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'QE DC Population']),
-            'QE Survival Fraction': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'QE DC Population']),
+            'QE Duty Cycle': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'QE Active Population']),
+            'QE Survival Fraction': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'QE Active Population']),
             'Mid Survival Fraction': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'Population Mol']),
             'Int. per Mol (Photons)': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'Population Mol']),
-            'QE Int. per Mol (Photons)': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'QE DC Population']),
+            'Int. per SC (Photons)': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'Population Mol']),
+            'QE Int. per Mol (Photons)': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'QE Active Population']),
+            'QE Int. per SC (Photons)': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'QE Active Population']),
+            'SC per Mol': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'Population Mol']),
             'QE SC per Mol': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'QE Active Population']),
+            'On Time per SC (s)': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'Population Mol']),
+            'QE On Time per SC (s)': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'QE Active Population']),
             'Uncertainty (um)': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'Population Mol']),
+            'QE Uncertainty (um)': lambda x: np.average(x, weights=grouped_df.loc[x.index, 'QE Active Population']),
+            'QE Period (s)': lambda x: list(x.unique()),
             '# Images': 'count'
         }
         return grouped_df.agg(aggregation)

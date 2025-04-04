@@ -11,6 +11,7 @@ from Analysis.STORM.Models.track import Track
 from Analysis.STORM.analytics_storm import calculate_frequency
 from Dashboard.graphs import plot_histograms, plot_intensity_vs_frame, plot_time_series_interactive
 from Data_access.storm_db import STORMDatabaseManager
+from UI.STORM.dashboard.storm_filters import apply_selected_filters, display_filtered_metadata, fetch_and_display_filtered_data, get_pre_metrics, load_storm_metadata, select_filter_columns
 
 
 
@@ -25,53 +26,6 @@ class STORMDashboard:
         self.storm_folder = storm_folder
         self.database = STORMDatabaseManager()
 
-
-    def load_storm_metadata(self):
-        """
-        Load distinct metadata from the database where `tag='pulsestorm'`, but only for metadata entries
-        that have associated molecules. Also, count the number of experiments that contain molecule data.
-
-        Returns:
-            tuple:
-                - dict: Metadata dictionary where keys are metadata names and values are lists of unique values.
-                - int: Number of files (experiments) that have at least one molecule.
-        """
-        # Aggregation pipeline to fetch distinct metadata with molecules
-        pipeline = [
-            {"$match": {
-                "time_series": {"$exists": True, "$ne": []}  # Ensure the experiment has associated time series data
-            }},
-            {"$unwind": "$metadata"},  # Unwind metadata array
-            {"$group": {
-                "_id": "$metadata.name",
-                "uniqueValues": {"$addToSet": "$metadata.value"}
-            }},
-            {"$sort": {"_id": 1}},  # Sort by metadata name
-            {"$facet": {
-                "metadataInfo": [
-                    # Pass all previous grouped data
-                    {"$project": {"_id": 1, "uniqueValues": 1}}
-                ],
-                "count": [
-                    # Count the distinct experiment documents that have time series
-                    {"$count": "numExperimentsWithTimeSeries"}
-                ]
-            }}
-        ]
-
-        metadata_result = list(self.database.experiments.aggregate(pipeline))
-        
-
-        database_metadata = {item['_id']: item['uniqueValues'] for item in metadata_result[0]['metadataInfo']}
-
-        if metadata_result[0]['count']:
-            num_experiments_with_molecules = metadata_result[0]['count'][0]['numExperimentsWithTimeSeries']
-        else:
-            num_experiments_with_molecules = 0
-
-        return database_metadata, num_experiments_with_molecules
-    
-
     def run_storm_dashboard_ui(self):
         """
         Displays the PulseSTORM Dashboard UI for filtering, analyzing, and visualizing STORM data.
@@ -81,80 +35,26 @@ class STORMDashboard:
         """
 
         # Load unique metadata values and number of experiments with molecules
-        metadata_values, num_experiments = self.load_storm_metadata()
+        metadata_values = load_storm_metadata(self.database)
+
+        desc_columns = ["Experiment"] + list(metadata_values.keys())
 
         with st.expander("Filter Options", expanded=True):
             """
             Allows users to filter the metadata based on specific columns and values. 
             Updates other datasets (localizations, tracks, etc.) based on the filtered metadata.
             """
-
-            st.info("Apply filters to metadata columns. All data is included by default.")
-
-            # Multiselect to choose metadata columns for filtering
-            selected_filter_columns = st.multiselect(
-                'Select columns to filter by:',
-                options=list(metadata_values.keys()),
-                key='filter_select',
-                help="Choose metadata columns to filter the dataset."
-            )
-
-            # Initialize dictionary to store selected values for each column
-            selected_filters = {}
-
-            # Iterate through selected filter columns to allow filtering by values
-            if selected_filter_columns:
-                for col in selected_filter_columns:
-                    unique_values = metadata_values[col]  # Get unique values from the DB query
-
-                    selected_values = st.multiselect(
-                        f"Filter {col}:",
-                        options=unique_values,
-                        default=unique_values,  # Default to all values
-                        key=f'filter_{col}',
-                        help=f"Select specific values for filtering the column '{col}'."
-                    )
-
-                    # Store selected values in the dictionary
-                    selected_filters[col] = selected_values
-
-            # Fetch metadata (apply filters if selected)
-            if selected_filters:
-                metadata_analysis = self.database.get_metadata(selected_filters)
-            else:
-                metadata_analysis = self.database.get_metadata()
+            selected_filter_columns = select_filter_columns(metadata_values)
+            selected_filters = apply_selected_filters(selected_filter_columns, metadata_values)
+            metadata_analysis = fetch_and_display_filtered_data(self.database, selected_filters)
+            metadata_df, display_columns = display_filtered_metadata(metadata_analysis, selected_filter_columns)
 
             # Retrieve unique experiment IDs
-            experiment_ids = list(metadata_analysis.keys())  
-
+            experiment_ids = list(metadata_analysis.keys())
             st.success(f"Number of experiments retrieved: {len(experiment_ids)}")  # Display the count
 
-            # Display filtered metadata
-            st.markdown("___")
-            st.write("### Data after Filtering:")
-            st.write("Displaying unique files with their metadata values.")
-
-            # Ensure selected columns include 'Experiment' (folder path)
-            display_columns = ["Experiment"] + selected_filter_columns if selected_filter_columns else list(metadata_analysis.values())[0].keys()
-
-            # Convert metadata dictionary to DataFrame for display
-            if metadata_analysis:
-                metadata_df = pd.DataFrame.from_dict(metadata_analysis, orient="index")
-                metadata_df.index.name = "Experiment ID"  # Label index for clarity
-
-                # Show filtered metadata
-                st.dataframe(metadata_df[display_columns])
-
-                # Display number of retrieved experiments
-                st.success(f"Loaded {len(metadata_df)} experiment entries.")
-            else:
-                st.warning("No data found for the selected filters.")
-
             # Fetch datasets related to experiment IDs
-            grouped_molecules = self.database.get_grouped_molecules_and_tracks(experiment_ids)
-            # Print experiment IDs from grouped_molecules
-            time_series_dict = self.database.get_grouped_time_series(experiment_ids)
-            # Print experiment IDs from time_series_dict
+            grouped_molecules, time_series_dict = get_pre_metrics(experiment_ids)
 
         # Calculate and display metrics
         st.markdown("___")
@@ -170,13 +70,9 @@ class STORMDashboard:
             metrics_df.insert(0, '# Images', len(metadata_analysis))
             metrics_columns = metrics_df.columns.drop('Experiment ID')
 
-            metadata_df = pd.DataFrame.from_dict(metadata_analysis, orient='index').reset_index()
-            metadata_df.rename(columns={'index': 'Experiment ID'}, inplace=True)
-
             # Merge metrics with metadata for context and further analysis
             if not metrics_df.empty and not metadata_df.empty:
                 metridata = pd.merge(metadata_df, metrics_df, on='Experiment ID', how='inner')
-                st.write(metridata)
                 st.write("Metrics successfully calculated and merged with metadata.")
             else:
                 st.warning("No metrics were calculated. Please check your data or filtering criteria.")
@@ -208,7 +104,6 @@ class STORMDashboard:
                     key='metrics_select',
                     help="Select one or more metrics columns to display aggregated results."
                 )
-
             # Display grouped data if metrics are available
             if not metrics.empty:
                 # Combine selected group and metric columns
@@ -218,10 +113,10 @@ class STORMDashboard:
                     selected_columns = metridata.columns.tolist()  # Default to all columns
 
                 if not selected_group_columns:
-                    selected_group_columns = ['IDENTIFIER']  # Default grouping column
+                    selected_group_columns = ['Experiment']  # Default grouping column
 
                 # Aggregate metrics based on group selections
-                grouped_metrics = metridata.groupby(selected_group_columns).apply(aggregate_metrics)
+                grouped_metrics = metridata.groupby(selected_group_columns).apply(molecule_metrics.aggregate_metrics)
                 grouped_metrics = grouped_metrics[selected_metrics_columns]
 
                 # Display the grouped metrics

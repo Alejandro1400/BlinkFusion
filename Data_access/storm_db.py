@@ -294,8 +294,7 @@ class STORMDatabaseManager:
 
         return metadata_dict
     
-
-    def get_grouped_molecules_and_tracks(self, experiment_ids):
+    def get_grouped_molecules_and_tracks(_self, _experiment_ids):
         """
         Retrieves and groups molecules with their associated tracks for the given experiment IDs.
         
@@ -306,7 +305,7 @@ class STORMDatabaseManager:
             dict: A dictionary with experiment IDs as keys and lists of Molecule objects as values.
         """
         # Fetch all molecules for the specified experiment IDs
-        query_result = list(self.molecules.find({"experiment_id": {"$in": experiment_ids}}))
+        query_result = list(_self.molecules.find({"experiment_id": {"$in": _experiment_ids}}))
         total_documents = len(query_result)
         
         if total_documents == 0:
