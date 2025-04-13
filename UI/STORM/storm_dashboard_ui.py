@@ -2,13 +2,11 @@ import numpy as np
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from Analysis.STORM.analytics_storm import calculate_frequency
-from Dashboard.graphs import plot_histograms, plot_time_series_interactive
 from Data_access.storm_db import STORMDatabaseManager
 from UI.STORM.dashboard.comparison.storm_comp_analysis import comparison_analysis #, time_series_comparison
 from UI.STORM.dashboard.comparison.storm_metrics_analysis import display_blinking_statistics, metrics_metadata_merge
 from UI.STORM.dashboard.comparison.storm_filters import apply_selected_filters, display_filtered_metadata, fetch_and_display_filtered_data, get_pre_metrics, load_storm_metadata, select_filter_columns
-from UI.STORM.dashboard.image_statistics.visualizations import display_time_series_image
+from UI.STORM.dashboard.image_statistics.visualizations import display_histograms_image, display_time_series_image
 
 
 
@@ -67,7 +65,6 @@ class STORMDashboard:
             comparison_analysis(metridata, desc_columns, metrics_columns)
             #time_series_comparison(time_series_dict, metadata_analysis)
 
-
         st.markdown("___")
         st.write("### Image Statistics")
 
@@ -93,8 +90,8 @@ class STORMDashboard:
         qe_start, qe_end = map(int, image_metadata_dict['QE Period (s)'].split('-'))
         frames = image_metadata_dict['Frames']
         exp = image_metadata_dict['Exposure']
-        frame_rate = exp / 1000
-        selected_timeseries['End Frame'] = (selected_timeseries['End Frame'] * frame_rate).round()
+        frame_rate_inv = exp / 1000
+        selected_timeseries['End Frame'] = (selected_timeseries['End Frame'] * frame_rate_inv).round()
         selected_timeseries['End Frame'] = (selected_timeseries['End Frame'] / 10).round() * 10 
         selected_timeseries = selected_timeseries.rename(columns={'End Frame': 'index'}).drop(columns=['Start Frame'])
         qe_dc = image_metadata_dict['QE Duty Cycle']
@@ -106,7 +103,6 @@ class STORMDashboard:
             Image-specific analysis section for visualizing time series and histogram data.
             Users can select an image, analyze time series trends, and generate histograms.
             """
-            st.subheader("Time Series Analysis")
 
             display_time_series_image(
                 selected_timeseries=selected_timeseries,
@@ -115,78 +111,19 @@ class STORMDashboard:
                 qe_dc=qe_dc,
                 qe_sf=qe_sf
             )
+        
+        with st.expander("Histogram Analysis", expanded=True):
 
-            st.markdown("___")
-
-            st.subheader("Histogram Analysis")
-
-            # Create four columns for user controls
-            col1, col2, col3, col4 = st.columns(4)
-
-            # Option to select population type (Whole Population or QE Population)
-            with col1:
-                selected_option1 = st.radio(
-                    "Select the tracks frequency to display",
-                    ["Whole Population", "Quasi-Equilibrium Population"],
-                    help="Choose whether to analyze the whole population or only the quasi-equilibrium population."
-                )
-
-            # Option to group data by molecule or track
-            with col2:
-                selected_option2 = st.radio(
-                    "Select the grouping to display",
-                    ["By Molecule", "By Track"],
-                    help="Choose to group the data by molecules or tracks for histogram generation."
-                )
-
-            # Slider for adjusting the number of bins in histograms
-            with col3:
-                num_bins = st.slider(
-                    "Number of Bins",
-                    min_value=5,
-                    max_value=50,
-                    value=20,
-                    help="Adjust the number of bins for the histograms."
-                )
-
-            # Checkbox for removing outliers
-            with col4:
-                remove_outliers = st.checkbox(
-                    "Remove Outliers",
-                    value=False,
-                    help="Enable to exclude outliers from the histograms."
-                )
-
-            # Convert options to parameters for histogram calculation
-            population_type = 'quasi' if selected_option1 == "Quasi-Equilibrium Population" else 'whole'
-            grouping_type = 'molecule' if selected_option2 == "By Molecule" else 'track'
-
-            # Calculate frequencies for histograms
-            duty_cycle, photons, switching_cycles, on_time, classification = calculate_frequency(
-                selected_qe_tracks=selected_tracks,
-                selected_qe_molecules=selected_molecules,
+            display_histograms_image(
+                selected_molecules=selected_molecules,
+                selected_metridata=selected_metridata,
                 qe_start=qe_start,
                 qe_end=qe_end,
                 frames=frames,
-                exp=exp,
-                population=population_type,
-                metric=grouping_type
+                exp=exp
             )
 
-            # Generate and display histograms
-            plot_histograms(
-                duty_cycle=duty_cycle,
-                photons=photons,
-                switching_cycles=switching_cycles,
-                on_time=on_time,
-                metrics=selected_metrics,
-                remove_outliers=remove_outliers,
-                num_bins=num_bins,
-                metric_type=grouping_type
-            )
-
-
-            st.subheader("Blinking Classification")
+        with st.expander("Blinking Classification", expanded=True):
 
             # Prepare the classification keys and their IDs
             classification_keys = [

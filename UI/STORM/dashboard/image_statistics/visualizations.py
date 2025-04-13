@@ -3,7 +3,8 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 
-from Dashboard.graphs import plot_time_series_interactive
+from Analysis.STORM.Calculator.frequency_calculator import calculate_frequency
+from Dashboard.graphs import plot_histograms, plot_time_series_interactive
 
 def display_time_series_image(
     selected_timeseries, qe_start, qe_end, qe_dc, qe_sf
@@ -56,3 +57,71 @@ def display_time_series_image(
         # Display time series data as a DataFrame
         st.write("Time Series Data")
         st.dataframe(time_metric, use_container_width=True, height=200)
+
+
+def display_histograms_image(
+    selected_molecules, selected_metridata, qe_start, qe_end, frames, exp
+):
+    # Create four columns for user controls
+    col1, col2, col3, col4 = st.columns(4)
+
+    # Option to select population type (Whole Population or QE Population)
+    with col1:
+        selected_option1 = st.radio(
+            "Select the tracks frequency to display",
+            ["Whole Population", "Quasi-Equilibrium Population"],
+            help="Choose whether to analyze the whole population or only the quasi-equilibrium population."
+        )
+
+    # Option to group data by molecule or track
+    with col2:
+        selected_option2 = st.radio(
+            "Select the grouping to display",
+            ["By Molecule", "By Track"],
+            help="Choose to group the data by molecules or tracks for histogram generation."
+        )
+
+    # Slider for adjusting the number of bins in histograms
+    with col3:
+        num_bins = st.slider(
+            "Number of Bins",
+            min_value=5,
+            max_value=50,
+            value=20,
+            help="Adjust the number of bins for the histograms."
+        )
+
+    # Checkbox for removing outliers
+    with col4:
+        remove_outliers = st.checkbox(
+            "Remove Outliers",
+            value=False,
+            help="Enable to exclude outliers from the histograms."
+        )
+
+    # Convert options to parameters for histogram calculation
+    population_type = 'quasi' if selected_option1 == "Quasi-Equilibrium Population" else 'whole'
+    grouping_type = 'molecule' if selected_option2 == "By Molecule" else 'track'
+
+    # Calculate frequencies for histograms
+    duty_cycle, photons, switching_cycles, on_time, classification = calculate_frequency(
+        selected_qe_molecules=selected_molecules,
+        qe_start=qe_start,
+        qe_end=qe_end,
+        frames=frames,
+        exp=exp,
+        population=population_type,
+        metric=grouping_type
+    )
+
+    # Generate and display histograms
+    plot_histograms(
+        duty_cycle=duty_cycle,
+        photons=photons,
+        switching_cycles=switching_cycles,
+        on_time=on_time,
+        metrics=selected_metridata,
+        remove_outliers=remove_outliers,
+        num_bins=num_bins,
+        metric_type=grouping_type
+    )
