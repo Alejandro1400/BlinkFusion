@@ -77,74 +77,79 @@ def comparison_analysis(metridata, desc_columns, metrics_columns):
         st.dataframe(display_df, use_container_width=True, height=200)
 
 
-def time_series_comparison(timeseries, timeseries_analysis, metadata_analysis):
-    """
-    Allows users to configure and view time-series comparisons.
-    Args:
-        timeseries (DataFrame): DataFrame containing time-series data.
-        timeseries_analysis (DataFrame): DataFrame with analysis results.
-        metadata_analysis (DataFrame): DataFrame with metadata.
-    """
-    st.subheader("Time Series Comparison")
-    col1, col2, col3 = st.columns(3)
-    time_series_columns = timeseries.columns.drop('IDENTIFIER')
+# def time_series_comparison(timeseries, metadata_analysis):
+#     """
+#     Allows users to configure and view time-series comparisons.
+#     Args:
+#         timeseries (DataFrame): DataFrame containing time-series data.
+#         timeseries_analysis (DataFrame): DataFrame with analysis results.
+#         metadata_analysis (DataFrame): DataFrame with metadata.
+#     """
+#     st.markdown("___")
+#     st.subheader("Time Series Comparison")
+#     col1, col2, col3 = st.columns(3)
+#     st.write(timeseries)
+#     for key, value in timeseries.items():
+#         print(f"{key}: {type(value)}")
 
-    with col1:
-        num_axes = st.selectbox(
-            'Number of Y-Axes:',
-            options=[1, 2],
-            index=0,
-            key='num_axes_select',
-            help="Select the number of Y-axes to display."
-        )
+#     time_series_columns = timeseries.columns.drop('IDENTIFIER')
 
-    with col2:
-        y1_label = st.selectbox(
-            'Y1 Axis:',
-            options=list(time_series_columns),
-            key='y1_select',
-            help="Select a column for the primary Y-axis."
-        )
+#     with col1:
+#         num_axes = st.selectbox(
+#             'Number of Y-Axes:',
+#             options=[1, 2],
+#             index=0,
+#             key='num_axes_select',
+#             help="Select the number of Y-axes to display."
+#         )
 
-    y2_label = None
-    if num_axes == 2:
-        with col3:
-            y2_label = st.selectbox(
-                'Y2 Axis:',
-                options=list(time_series_columns),
-                key='y2_select',
-                help="Select a column for the secondary Y-axis."
-            )
+#     with col2:
+#         y1_label = st.selectbox(
+#             'Y1 Axis:',
+#             options=list(time_series_columns),
+#             key='y1_select',
+#             help="Select a column for the primary Y-axis."
+#         )
 
-    timeseries_analysis = timeseries_analysis.reset_index()
-    timeseries_data = timeseries_analysis.merge(metadata_analysis, on='IDENTIFIER', how='inner').set_index('index')
+#     y2_label = None
+#     if num_axes == 2:
+#         with col3:
+#             y2_label = st.selectbox(
+#                 'Y2 Axis:',
+#                 options=list(time_series_columns),
+#                 key='y2_select',
+#                 help="Select a column for the secondary Y-axis."
+#             )
 
-    if not timeseries_data.empty:
-        fig = go.Figure()
+#     timeseries_analysis = timeseries_analysis.reset_index()
+#     timeseries_data = timeseries_analysis.merge(metadata_analysis, on='IDENTIFIER', how='inner').set_index('index')
 
-        grouped_y1 = timeseries_data[y1_label].groupby(timeseries_data.index).mean()
-        fig.add_trace(go.Scatter(x=grouped_y1.index, y=grouped_y1, mode='lines', name=y1_label))
+#     if not timeseries_data.empty:
+#         fig = go.Figure()
 
-        if y2_label:
-            grouped_y2 = timeseries_data[y2_label].groupby(timeseries_data.index).mean()
-            fig.add_trace(go.Scatter(x=grouped_y2.index, y=grouped_y2, mode='lines', name=y2_label, yaxis='y2'))
+#         grouped_y1 = timeseries_data[y1_label].groupby(timeseries_data.index).mean()
+#         fig.add_trace(go.Scatter(x=grouped_y1.index, y=grouped_y1, mode='lines', name=y1_label))
 
-            fig.update_layout(
-                yaxis2=dict(
-                    title=y2_label,
-                    overlaying='y',
-                    side='right'
-                )
-            )
+#         if y2_label:
+#             grouped_y2 = timeseries_data[y2_label].groupby(timeseries_data.index).mean()
+#             fig.add_trace(go.Scatter(x=grouped_y2.index, y=grouped_y2, mode='lines', name=y2_label, yaxis='y2'))
 
-        fig.update_layout(
-            title="Time Series Comparison",
-            xaxis_title="Time (s)",
-            yaxis_title=y1_label,
-            hovermode="x"
-        )
+#             fig.update_layout(
+#                 yaxis2=dict(
+#                     title=y2_label,
+#                     overlaying='y',
+#                     side='right'
+#                 )
+#             )
 
-        st.plotly_chart(fig, use_container_width=True)
-        display_columns = ['Time (s)', y1_label] + ([y2_label] if y2_label else [])
-        display_df = timeseries_data.reset_index().rename(columns={'index': 'Time (s)'})[display_columns]
-        st.dataframe(display_df, use_container_width=True, height=200)
+#         fig.update_layout(
+#             title="Time Series Comparison",
+#             xaxis_title="Time (s)",
+#             yaxis_title=y1_label,
+#             hovermode="x"
+#         )
+
+#         st.plotly_chart(fig, use_container_width=True)
+#         display_columns = ['Time (s)', y1_label] + ([y2_label] if y2_label else [])
+#         display_df = timeseries_data.reset_index().rename(columns={'index': 'Time (s)'})[display_columns]
+#         st.dataframe(display_df, use_container_width=True, height=200)

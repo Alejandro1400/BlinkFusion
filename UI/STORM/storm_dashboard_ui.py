@@ -5,9 +5,10 @@ import plotly.express as px
 from Analysis.STORM.analytics_storm import calculate_frequency
 from Dashboard.graphs import plot_histograms, plot_time_series_interactive
 from Data_access.storm_db import STORMDatabaseManager
-from UI.STORM.dashboard.storm_comp_analysis import comparison_analysis, time_series_comparison
-from UI.STORM.dashboard.storm_metrics_analysis import display_blinking_statistics, metrics_metadata_merge
-from UI.STORM.dashboard.storm_filters import apply_selected_filters, display_filtered_metadata, fetch_and_display_filtered_data, get_pre_metrics, load_storm_metadata, select_filter_columns
+from UI.STORM.dashboard.comparison.storm_comp_analysis import comparison_analysis #, time_series_comparison
+from UI.STORM.dashboard.comparison.storm_metrics_analysis import display_blinking_statistics, metrics_metadata_merge
+from UI.STORM.dashboard.comparison.storm_filters import apply_selected_filters, display_filtered_metadata, fetch_and_display_filtered_data, get_pre_metrics, load_storm_metadata, select_filter_columns
+from UI.STORM.dashboard.image_statistics.visualizations import display_time_series_image
 
 
 
@@ -64,90 +65,56 @@ class STORMDashboard:
         # Metrics and Time Series Graphs Comparison
         with st.expander("Comparison Analysis", expanded=True):
             comparison_analysis(metridata, desc_columns, metrics_columns)
-            time_series_comparison(time_series_dict, metadata_analysis)
+            #time_series_comparison(time_series_dict, metadata_analysis)
 
-        with st.expander("Image Statistics", expanded=True):
+
+        st.markdown("___")
+        st.write("### Image Statistics")
+
+        experiment_paths = list({entry["Experiment"] for entry in metadata_analysis.values()})
+        selected_experiment = st.selectbox(
+            "Select Image",
+            experiment_paths,
+            index=0,
+            help="Choose an image by its identifier to analyze its time series data."
+        )
+        selected_id = next(
+            (id_ for id_, entry in metadata_analysis.items() if entry["Experiment"] == selected_experiment),
+            None  # default if not found
+        )
+
+        selected_molecules = grouped_molecules[selected_id]
+        selected_timeseries_original = time_series_dict[selected_id]  # Keep original safe
+        selected_timeseries = selected_timeseries_original.copy()     # Work on a copy
+        selected_metridata = metridata[metridata['Experiment ID'] == selected_id].drop(columns='Experiment ID').set_index('Experiment')
+
+        image_metadata_dict = selected_metridata.iloc[0].to_dict()
+        # Extract Quasi-Equilibrium (QE) parameters and metadata from the dict
+        qe_start, qe_end = map(int, image_metadata_dict['QE Period (s)'].split('-'))
+        frames = image_metadata_dict['Frames']
+        exp = image_metadata_dict['Exposure']
+        frame_rate = exp / 1000
+        selected_timeseries['End Frame'] = (selected_timeseries['End Frame'] * frame_rate).round()
+        selected_timeseries['End Frame'] = (selected_timeseries['End Frame'] / 10).round() * 10 
+        selected_timeseries = selected_timeseries.rename(columns={'End Frame': 'index'}).drop(columns=['Start Frame'])
+        qe_dc = image_metadata_dict['QE Duty Cycle']
+        qe_sf = image_metadata_dict['QE Survival Fraction']
+
+        
+        with st.expander("Time Series Analysis", expanded=True):
             """
             Image-specific analysis section for visualizing time series and histogram data.
             Users can select an image, analyze time series trends, and generate histograms.
             """
-
             st.subheader("Time Series Analysis")
 
-            # Time series columns excluding 'IDENTIFIER'
-            time_series_columns = timeseries.columns.drop('IDENTIFIER')
-
-            # Dropdown for selecting an image
-            selected_id = st.selectbox(
-                "Select Image",
-                metadata_analysis['IDENTIFIER'].unique(),
-                index=0,
-                help="Choose an image by its identifier to analyze its time series data."
+            display_time_series_image(
+                selected_timeseries=selected_timeseries,
+                qe_start=qe_start,
+                qe_end=qe_end,
+                qe_dc=qe_dc,
+                qe_sf=qe_sf
             )
-
-            # Create two columns for selecting Y1 and Y2 axes
-            col1, col2 = st.columns(2)
-
-            with col1:
-                selected_y1_label = st.selectbox(
-                    'Y1 Axis:',
-                    options=list(time_series_columns),
-                    key='y1_image_select',
-                    index=0,
-                    help="Choose the primary metric for the Y1 axis."
-                )
-
-            with col2:
-                available_legends = [col for col in time_series_columns if col != 'IDENTIFIER' and col != selected_y1_label]
-                selected_y2_label = st.selectbox(
-                    'Y2 Axis:',
-                    options=list(available_legends),
-                    key='y2_image_select',
-                    index=0,
-                    help="Choose the secondary metric for the Y2 axis."
-                )
-
-            # Filter data for the selected image
-            selected_localizations = locs_analysis[locs_analysis['IDENTIFIER'] == selected_id]
-            selected_tracks = tracks_analysis[tracks_analysis['IDENTIFIER'] == selected_id]
-            selected_molecules = molecules_analysis[molecules_analysis['IDENTIFIER'] == selected_id]
-            selected_metadata = metadata_analysis[metadata_analysis['IDENTIFIER'] == selected_id]
-            selected_timeseries = timeseries_analysis[timeseries_analysis['IDENTIFIER'] == selected_id]
-            selected_metrics = metrics[metrics['IDENTIFIER'] == selected_id]
-
-            # Extract Quasi-Equilibrium (QE) parameters and metadata
-            qe_start, qe_end = map(int, selected_metrics['QE Period (s)'].iloc[0].split('-'))
-            frames = selected_metadata['FRAMES'].iloc[0]
-            exp = selected_metadata['EXPOSURE'].iloc[0]
-            qe_dc, qe_sf = selected_metrics['QE Duty Cycle'].iloc[0], selected_metrics['QE Survival Fraction'].iloc[0]
-
-            # Display metadata as a DataFrame
-            st.dataframe(selected_metadata.set_index('IDENTIFIER'), height=150)
-
-            # Prepare time series data for plotting
-            selected_columns = ['index', selected_y1_label, selected_y2_label]
-            if not selected_timeseries.empty:
-                time_metric = selected_timeseries[selected_columns].set_index('index').sort_index()
-
-                # Align time indices to nearest 10 for cleaner visualization
-                time_metric.index = time_metric.index.map(lambda x: int(np.ceil(x / 10) * 10))
-
-                # Create and display the time series plot
-                fig = plot_time_series_interactive(
-                    metric1_data=time_metric[selected_y1_label],
-                    metric2_data=time_metric[selected_y2_label],
-                    metric1_name=selected_y1_label,
-                    metric2_name=selected_y2_label,
-                    qe_start=qe_start,
-                    qe_end=qe_end,
-                    qe_dc=qe_dc,
-                    qe_sf=qe_sf
-                )
-                st.plotly_chart(fig, use_container_width=True)
-
-                # Display time series data as a DataFrame
-                st.write("Time Series Data")
-                st.dataframe(time_metric, use_container_width=True, height=200)
 
             st.markdown("___")
 
