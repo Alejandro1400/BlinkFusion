@@ -125,3 +125,5 @@ def display_histograms_image(
         num_bins=num_bins,
         metric_type=grouping_type
     )
+
+    return selected_option1, classification

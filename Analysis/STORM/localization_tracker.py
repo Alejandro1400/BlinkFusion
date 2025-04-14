@@ -111,7 +111,6 @@ class LocalizationTracker:
 
                 if track.gaps_counter >= self.max_gaps:
                     if len(track.localizations) >= self.min_frames:
-                        track.track_id = self.track_id_counter
                         track.start_frame = track.localizations[0].frame
                         track.end_frame = track.localizations[-1].frame
                         self.completed_tracks.append(track)
@@ -172,7 +171,7 @@ class LocalizationTracker:
 
             for i, loc in enumerate(frame_localizations):
                 if i not in assigned_indices:
-                    new_track = Track(self.track_id_counter)
+                    new_track = Track()
                     new_track.add_localization(loc)
                     new_track.start_frame = frame
                     new_track.end_frame = frame

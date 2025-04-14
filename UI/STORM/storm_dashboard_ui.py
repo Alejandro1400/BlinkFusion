@@ -1,7 +1,7 @@
 import numpy as np
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+import plotly.express as px 
 from Data_access.storm_db import STORMDatabaseManager
 from UI.STORM.dashboard.comparison.storm_comp_analysis import comparison_analysis #, time_series_comparison
 from UI.STORM.dashboard.comparison.storm_metrics_analysis import display_blinking_statistics, metrics_metadata_merge
@@ -114,7 +114,7 @@ class STORMDashboard:
         
         with st.expander("Histogram Analysis", expanded=True):
 
-            display_histograms_image(
+            selected_option1, classification = display_histograms_image(
                 selected_molecules=selected_molecules,
                 selected_metridata=selected_metridata,
                 qe_start=qe_start,
@@ -177,14 +177,16 @@ class STORMDashboard:
                                 tracks_ids = molecule_data['Tracks']
 
                                 # Filter the localizations using the retrieved tracks
-                                selected_localizations_data = selected_localizations[
-                                    selected_localizations['TRACK_ID'].isin(tracks_ids)
-                                ]
+                                selected_localizations_data = self.database.get_localizations_by_tracks(tracks_ids)
+
+                                st.write(f"**Number of Localizations**: {len(selected_localizations_data)}")
+
 
                                 # Prepare the data for plotting (initially using frames)
                                 plot_data = pd.DataFrame({
-                                    'INTENSITY': selected_localizations_data['INTENSITY [PHOTON]'].values,
-                                    'FRAME': selected_localizations_data['FRAME'].values  # Use frames directly
+                                    'INTENSITY': selected_localizations_data['INTENSITY'].values,
+                                    'FRAME': selected_localizations_data['FRAME'].values,  # Use frames directly,
+                                    'TRACK_ID': selected_localizations_data['TRACK_ID'].values
                                 })
                                 plot_data = plot_data.set_index('FRAME').sort_index()
 

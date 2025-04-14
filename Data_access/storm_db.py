@@ -154,6 +154,7 @@ class STORMDatabaseManager:
         for molecule in molecules:
             molecule_dict = molecule.to_dict()  # Ensure localizations are not included
             molecule_dict['experiment_id'] = experiment_id
+            molecule_dict['tracks'] = []
             for track in molecule.tracks:
                 # Append track without localizations
                 track_dict = track.to_dict(embed_localizations=False)  # Do not embed localizations
@@ -334,9 +335,19 @@ class STORMDatabaseManager:
                             f"Estimated time remaining: {estimated_remaining_time / 60:.2f} minutes.")
             
             exp_id = doc["experiment_id"]
-            tracks = [
-                Track(
-                    track_id=track["id"],
+            # Track deduplication set
+            seen_track_ids = set()
+
+            # Unique tracks only
+            tracks = []
+            for track in doc.get("tracks", []):
+                track_id = track.get("id")
+                if track_id in seen_track_ids:
+                    continue  # Skip duplicate
+                seen_track_ids.add(track_id)
+
+                track_obj = Track(
+                    track_id=track_id,
                     start_frame=track.get("start_frame"),
                     end_frame=track.get("end_frame"),
                     intensity=track.get("intensity"),
@@ -349,8 +360,7 @@ class STORMDatabaseManager:
                     y=track.get("y"),
                     molecule_id=doc["_id"]
                 )
-                for track in doc.get("tracks", [])
-            ]
+                tracks.append(track_obj)
             
             molecule = Molecule(
                 molecule_id=doc["_id"],
@@ -413,15 +423,60 @@ class STORMDatabaseManager:
             time_series_dict[experiment_id] = df
 
         return time_series_dict
+    
+
+    def get_localizations_by_tracks(self, track_ids: list[str]) -> pd.DataFrame:
+        """
+        Retrieves localizations associated with a list of track IDs and returns them as a DataFrame.
+
+        Args:
+            track_ids (list of str): List of track IDs to fetch localizations for.
+
+        Returns:
+            pd.DataFrame: DataFrame containing localizations for the given tracks.
+        """
+        query = {"track_id": {"$in": track_ids}}
+        cursor = self.localizations.find(query)
+
+        # Convert to DataFrame
+        df = pd.DataFrame(list(cursor))
+
+        if not df.empty:
+            # Normalize field names to match your previous code
+            df.rename(columns={
+                "track_id": "TRACK_ID",
+                "frame": "FRAME",
+                "intensity": "INTENSITY"
+            }, inplace=True)
+
+        return df
 
 
 if __name__ == "__main__":
-    # Define the database folder path
-    storm_folder = "C://Users//usuario//Box//For Alejandro//STORM Data"
+    # Initialize STORM database manager
+    storm_db = STORMDatabaseManager()
 
-    # Initialize STORM database
-    storm_db = STORMDatabaseManager(storm_folder)
-    storm_db.initialize_database()
-    storm_db.close()
+    # Step 1: Get all experiment IDs with molecules
+    experiment_ids = storm_db.molecules.distinct("experiment_id")
 
-    print("STORM database initialized successfully.")
+    # Step 2: Fetch grouped molecules and their tracks
+    grouped_molecules = storm_db.get_grouped_molecules_and_tracks(experiment_ids)
+
+    # Step 3: Display info for first 10 molecules (across all experiments)
+    count = 0
+    for exp_id, molecules in grouped_molecules.items():
+        for molecule in molecules:
+            print(f"\n🔬 Molecule ID: {molecule.molecule_id}")
+            print(f"📁 Experiment ID: {molecule.experiment_id}")
+            print(f"📊 Total Tracks: {len(molecule.tracks)}")
+            print(f"⏱️ Total On-Time: {molecule.total_on_time:.2f} frames")
+            print(f"🧬 Track IDs: {[track.track_id for track in molecule.tracks]}")
+
+            for track in molecule.tracks:
+                print(f"  ▶ Track {track.track_id}: Start {track.start_frame}, End {track.end_frame}, Intensity {track.intensity}")
+            
+            count += 1
+            if count >= 10:
+                break
+        if count >= 10:
+            break

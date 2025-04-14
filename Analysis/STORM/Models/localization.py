@@ -12,7 +12,7 @@ class Localization:
         self.offset = float(offset)
         self.bkgstd = float(bkgstd)
         self.uncertainty = float(uncertainty)
-        self.track_id = int(track_id)
+        self.track_id = track_id
 
     def distance_to(self, other):
         """Compute Euclidean distance to another localization."""
