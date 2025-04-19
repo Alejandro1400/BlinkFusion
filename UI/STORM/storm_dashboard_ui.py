@@ -48,8 +48,24 @@ class STORMDashboard:
             experiment_ids = list(metadata_analysis.keys())
             st.success(f"Number of experiments retrieved: {len(experiment_ids)}")  # Display the count
 
-            # Fetch datasets related to experiment IDs
-            grouped_molecules, time_series_dict = get_pre_metrics(experiment_ids)
+            # Initialize session state only once
+            if "load_metrics" not in st.session_state:
+                st.session_state.load_metrics = False
+                st.session_state.grouped_molecules = None
+                st.session_state.time_series_dict = None
+
+            # Button to trigger loading
+            if st.button("Load Molecules and Time Series Metrics"):
+                grouped_molecules, time_series_dict = get_pre_metrics(experiment_ids)
+                st.session_state.grouped_molecules = grouped_molecules
+                st.session_state.time_series_dict = time_series_dict
+                st.session_state.load_metrics = True
+
+            # Show success message and use cached values from session_state
+            if st.session_state.load_metrics:
+                st.success("Molecules and time series metrics loaded.")
+                grouped_molecules = st.session_state.grouped_molecules
+                time_series_dict = st.session_state.time_series_dict
 
         # Calculate and display metrics
         st.markdown("___")
