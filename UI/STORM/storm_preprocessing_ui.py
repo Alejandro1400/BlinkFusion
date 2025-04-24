@@ -46,10 +46,10 @@ def save_metadata_to_database(database_folder, all_files_metadata, formatted_met
             progress_placeholder.write(f"🔄 **Converting `{file_name}` from CZI to TIFF...**")
             final_folder_path = czi_2_tiff(file, database_folder, st.session_state.selected_for_folder, combined_metadata)
 
-            # Extract relative folder path (removing database folder)
-            relative_folder_path = os.path.relpath(final_folder_path, database_folder)
-
             file_name = os.path.basename(final_folder_path)  # Update file name with new TIFF name
+
+            # Extract relative folder path (removing database folder)
+            relative_folder_path = os.path.relpath(final_folder_path, database_folder) + f"\{file_name}" + ".tif"
 
             # Step 3: Saving metadata to the database
             progress_placeholder.write(f"💾 **Saving metadata for `{file_name}` into the database...**")

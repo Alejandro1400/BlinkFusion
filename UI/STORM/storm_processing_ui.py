@@ -40,12 +40,18 @@ class STORMProcessor:
             folder_path = folder['folder_path']
             experiment_id = folder['experiment_id']
 
+            print(f"Processing folder: {folder_path}")
+            print(f"Experiment ID: {experiment_id}")
+
             # Normalize the folder path to ensure there are no issues with relative paths or ".."
             folder_path = os.sep.join(part for part in folder_path.split(os.sep) if part != "..")
+            print(f"Normalized folder path: {folder_path}")
             full_folder_path = os.path.dirname(os.path.join(self.storm_folder, folder_path))
+            print(f"Full folder path: {full_folder_path}")
 
             # Assume the base name of the file is the last part of the path without the file extension
             base_name = os.path.basename(folder_path).rsplit('.', 1)[0]  # Correctly split off the file extension
+            print(f"Base name for files: {base_name}")
 
             # Construct full paths to the TIFF and localization CSV files
             tif_file = os.path.join(full_folder_path, f"{base_name}.tif")
@@ -54,6 +60,8 @@ class STORMProcessor:
             # Debugging prints to check paths
             print(f"TIF file path: {tif_file}")
             print(f"Locs file path: {locs_file}")
+
+            print(os.path.exists(tif_file), os.path.exists(locs_file))
 
             # Check if both files exist
             if os.path.exists(tif_file) and os.path.exists(locs_file):
