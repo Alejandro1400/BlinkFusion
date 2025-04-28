@@ -81,7 +81,6 @@ class STORMSingleImageDashboard:
 
         # Metrics table comparison
         metridata, metrics_columns = metrics_metadata_merge(grouped_molecules, time_series_dict, metadata_analysis, metadata_df)
-        display_blinking_statistics(metridata, desc_columns, metrics_columns, grouped_molecules, time_series_dict, metadata_analysis)
 
         st.markdown("___")
         st.write(f"### Image Statistics for {selected_experiment}")
