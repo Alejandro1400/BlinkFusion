@@ -16,7 +16,7 @@ def setup_sidebar():
         selected_filament = st.sidebar.radio("Select Operation:", filament_options)
         st.session_state.selected_option = f"Filament Analysis - {selected_filament}"
     elif selected_general == "STORM Analysis":
-        storm_options = ["Preprocessing", "Batch Processing", "Dashboard"]
+        storm_options = ["Preprocessing", "Batch Processing", "Comparison Dashboard", "Single Image Dashboard"]
         selected_storm = st.sidebar.radio("Select Operation:", storm_options)
         st.session_state.selected_option = f"STORM Analysis - {selected_storm}"
 

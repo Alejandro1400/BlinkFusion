@@ -4,6 +4,7 @@ from UI.SOAC.filament_preprocessing_ui import run_filament_preprocessing_ui
 from UI.SOAC.filament_processing_ui import run_filament_processing_ui
 from UI.STORM.storm_dashboard_ui import STORMDashboard
 from UI.STORM.storm_processing_ui import STORMProcessor
+from UI.STORM.storm_single_image_dash_ui import STORMSingleImageDashboard
 from UI.sidebar import setup_sidebar
 #from UI.STORM.storm_dashboard_ui import run_storm_dashboard_ui
 from UI.STORM.storm_preprocessing_ui import run_storm_preprocessing_ui
@@ -72,10 +73,16 @@ def display_content():
                             storm_proc.run_processing_ui()
                         else:
                             st.error("STORM database folder not set. Please configure it in the sidebar.")
-                    elif operation == "Dashboard":
+                    elif operation == "Comparison Dashboard":
                         if 'storm_database_folder' in st.session_state:
                             storm_dash = STORMDashboard(st.session_state.storm_database_folder)
                             storm_dash.run_storm_dashboard_ui()
+                        else:
+                            st.error("STORM database folder not set. Please configure it in the sidebar.")
+                    elif operation == "Single Image Dashboard":
+                        if 'storm_database_folder' in st.session_state:
+                            storm_si_dash = STORMSingleImageDashboard(st.session_state.storm_database_folder)
+                            storm_si_dash.run_storm_si_dashboard_ui()
                         else:
                             st.error("STORM database folder not set. Please configure it in the sidebar.")
                     else:
