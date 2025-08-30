@@ -11,7 +11,7 @@ This tutorial walks through the *manual step* in the blinking-statistics workflo
 
 ### 2. Download **ThunderSTORM plugin**
 - Download the latest ThunderSTORM `.jar` plugin from the official GitHub Pages:
-  - **Download link**: available on the ThunderSTORM homepage :contentReference[oaicite:1]{index=1}  
+  - **Download link**: available on the ThunderSTORM homepage [ThunderSTORM](https://github.com/zitmen/thunderstorm?tab=readme-ov-file)
   - You can also get installation instructions and access example data via the ThunderSTORM GitHub wiki or releases :contentReference[oaicite:2]{index=2}.
 
 **Installation steps**:
@@ -70,10 +70,6 @@ Now, once everything's installed, here’s how to process each pre-processed TIF
 | 7 | Export CSV file named `<filename>_locs.csv` |
 
 Repeat for each file to prepare them for your BlinkFusion processing page.
-
----
-
-##  Recommendations
 
 - Maintain the same naming conventions between TIFF and CSV output (`filename_locs.csv`) to streamline automation.
 - Consider enhancing your tutorial with sections on **batch processing using ImageJ macros**, if you want to scale to large datasets.
