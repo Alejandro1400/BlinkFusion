@@ -12,7 +12,7 @@ This tutorial walks through the *manual step* in the blinking-statistics workflo
 ### 2. Download **ThunderSTORM plugin**
 - Download the latest ThunderSTORM `.jar` plugin from the official GitHub Pages:
   - **Download link**: available on the ThunderSTORM homepage [ThunderSTORM](https://github.com/zitmen/thunderstorm?tab=readme-ov-file)
-  - You can also get installation instructions and access example data via the ThunderSTORM GitHub wiki or releases :contentReference[oaicite:2]{index=2}.
+  - You can also get installation instructions and access example data via the ThunderSTORM GitHub wiki or releases [Link](https://github.com/zitmen/thunderstorm/wiki/Tutorials)
 
 **Installation steps**:
 - Copy the downloaded `.jar` file into your ImageJ (or Fiji) `plugins/` directory.
