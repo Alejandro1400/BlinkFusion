@@ -1,4 +1,6 @@
 from collections import defaultdict
+from dotenv import load_dotenv
+import os
 import time
 from urllib.parse import quote_plus
 import uuid
@@ -10,28 +12,25 @@ from pymongo import ASCENDING, MongoClient
 from Analysis.STORM.Models.molecule import Molecule
 from Analysis.STORM.Models.track import Track
 
+load_dotenv()
+
 
 class STORMDatabaseManager:
     """Handles database connections and operations for the STORM database."""
 
-    def __init__(self, username="myadmin", password="Password123!", host='localhost', port=27017, database_name="storm_db"):
-        """
-        Initialize the STORMDatabaseManager with MongoDB connection details.
+    def __init__(self):
+        self.username = os.getenv("STORM_DB_USER")
+        self.password = os.getenv("STORM_DB_PASS")
+        self.host = os.getenv("STORM_DB_HOST", "localhost")
+        self.port = int(os.getenv("STORM_DB_PORT", 27017))
+        self.database_name = os.getenv("STORM_DB_NAME", "storm_db")
 
-        Args:
-            username (str): Username for MongoDB authentication.
-            password (str): Password for MongoDB authentication.
-            host (str): Host address of the MongoDB server.
-            port (int): Port number of the MongoDB server.
-            database_name (str): The name of the MongoDB database.
-        """
-        if username and password:
-            uri = f"mongodb://{quote_plus(username)}:{quote_plus(password)}@{host}:{port}"
-        else:
-            uri = f"mongodb://{host}:{port}"
-        
+        if not self.username or not self.password:
+            raise ValueError("Database credentials not found in environment variables.")
+
+        uri = f"mongodb://{self.username}:{quote_plus(self.password)}@{self.host}:{self.port}"
         self.client = MongoClient(uri)
-        self.db = self.client[database_name]
+        self.db = self.client[self.database_name]
         self.initialize_database()
 
     def initialize_database(self):
