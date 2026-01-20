@@ -14,3 +14,7 @@ __pycache__/
 
 # Ignore Auth data file
 auth_info.txt
+
+.env
+.venv/
+.vscode/
