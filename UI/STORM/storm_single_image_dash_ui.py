@@ -171,76 +171,92 @@ class STORMSingleImageDashboard:
                                 # Display photobleaching and duty cycle side by side (above intensity profile)
                                 col1, col2, col3 = st.columns(3)
                                 with col1:
-                                    # Change the duty cycle to 5 decimal places
-                                    st.write(f"**Duty Cycle**: {molecule_data.get('Duty Cycle', 'N/A'):.5f}")
+                                    dc = molecule_data.get("Duty Cycle", None)
+                                    if isinstance(dc, (int, float)):
+                                        st.write(f"**Duty Cycle**: {dc:.5f}")
+                                    else:
+                                        st.write("**Duty Cycle**: N/A")
                                 with col2:
                                     st.write(f"**Switching Cycles**: {len(molecule_data['Tracks'])}")
                                 with col3:
                                     st.write(f"**{molecule_data.get('Bleaching', 'N/A')}**")
-                                
+
                                 # Retrieve the tracks for the selected molecule from classification data
-                                tracks_ids = molecule_data['Tracks']
+                                tracks_ids = molecule_data["Tracks"]
 
                                 # Filter the localizations using the retrieved tracks
                                 selected_localizations_data = self.database.get_localizations_by_tracks(tracks_ids)
 
                                 st.write(f"**Number of Localizations**: {len(selected_localizations_data)}")
 
+                                # ---------------------------------------------------------------------
+                                # FIX STARTS HERE: make FRAME unique BEFORE reindexing
+                                # ---------------------------------------------------------------------
 
-                                # Prepare the data for plotting (initially using frames)
-                                plot_data = pd.DataFrame({
-                                    'INTENSITY': selected_localizations_data['INTENSITY'].values,
-                                    'FRAME': selected_localizations_data['FRAME'].values,  # Use frames directly,
-                                    'TRACK_ID': selected_localizations_data['TRACK_ID'].values
-                                })
-                                plot_data = plot_data.set_index('FRAME').sort_index()
+                                # Keep only the columns we need
+                                df = selected_localizations_data[["FRAME", "INTENSITY"]].copy()
 
-                                # Interpolate one-frame gaps
-                                gaps = plot_data.index.to_series().diff().loc[lambda x: x == 2].index  # Gaps of one frame
-                                for gap_start in gaps:
-                                    if (gap_start - 1) in plot_data.index and (gap_start + 1) in plot_data.index:
-                                        mean_intensity = (
-                                            plot_data.at[gap_start - 1, 'INTENSITY'] +
-                                            plot_data.at[gap_start + 1, 'INTENSITY']
-                                        ) / 2
-                                        plot_data.at[gap_start, 'INTENSITY'] = mean_intensity
+                                # Aggregate intensity so each FRAME appears only once
+                                # Choose aggregation: mean (recommended), sum, or max
+                                plot_data = (
+                                    df.groupby("FRAME", as_index=True)["INTENSITY"]
+                                    .mean()
+                                    .sort_index()
+                                    .to_frame()
+                                )
 
-                                # Reindex to ensure a continuous x-axis range
+                                # Choose the frame range (continuous x-axis)
                                 if selected_option1 == "Quasi-Equilibrium Population":
-                                    frame_range = np.arange(int(qe_start*(1000/exp)), int(qe_end*(1000/exp)) + 1, 1)  # Range for QE
+                                    frame_range = np.arange(
+                                        int(qe_start * (1000 / exp)),
+                                        int(qe_end * (1000 / exp)) + 1,
+                                        1
+                                    )
                                 else:
-                                    frame_range = np.arange(0, frames + 1, 1)  # Full frame range
+                                    frame_range = np.arange(0, frames + 1, 1)
 
-                                plot_data = plot_data.reindex(frame_range, fill_value=np.nan)
+                                # Reindex to include missing frames as NaN
+                                plot_data = plot_data.reindex(frame_range)
 
-                                # Convert frames to time (at the end)
-                                plot_data['TIME'] = plot_data.index * (exp / 1000)  # Convert frames to seconds
-                                plot_data = plot_data.reset_index(drop=True)  # Reset index for Plotly plotting
+                                # Interpolate ONLY one-frame gaps (single missing frame)
+                                plot_data["INTENSITY"] = plot_data["INTENSITY"].interpolate(limit=1)
 
-                                # Replace NaNs with 0 for plotting purposes
-                                #plot_data = plot_data.fillna(0)
+                                # Convert frames to time (seconds)
+                                plot_data["TIME"] = plot_data.index * (exp / 1000)
+
+                                # Reset index for Plotly (keeps TIME and INTENSITY as columns)
+                                plot_data = plot_data.reset_index(drop=True)
+
+                                # ---------------------------------------------------------------------
+                                # FIX ENDS HERE
+                                # ---------------------------------------------------------------------
 
                                 # Plot intensity profile with Plotly as a bar chart
                                 fig = px.bar(
                                     plot_data,
-                                    x='TIME',
-                                    y='INTENSITY',
+                                    x="TIME",
+                                    y="INTENSITY",
                                     title=f"Intensity Profile for Molecule ID: {selected_molecule_id}",
-                                    labels={'TIME': 'Time (s)', 'INTENSITY': 'Intensity (Photons)'},
-                                    template='plotly_white'
+                                    labels={"TIME": "Time (s)", "INTENSITY": "Intensity (Photons)"},
+                                    template="plotly_white"
                                 )
 
                                 # Customize the layout and bar appearance
-                                fig.update_traces(marker=dict(color='blue', line=dict(width=1, color='darkblue')), width=0.02)
+                                fig.update_traces(
+                                    marker=dict(color="blue", line=dict(width=1, color="darkblue")),
+                                    width=0.02
+                                )
                                 fig.update_layout(
                                     xaxis_title="Time (s)",
                                     yaxis_title="Intensity (Photons)",
-                                    xaxis=dict(range=(plot_data['TIME'].min(), plot_data['TIME'].max())),
-                                    hovermode='x unified',
+                                    xaxis=dict(range=(plot_data["TIME"].min(), plot_data["TIME"].max())),
+                                    hovermode="x unified",
                                     title_font=dict(size=16),
                                     font=dict(size=14)
                                 )
 
                                 st.plotly_chart(fig, use_container_width=True)
+
                         else:
                             st.write("No molecules")
+
