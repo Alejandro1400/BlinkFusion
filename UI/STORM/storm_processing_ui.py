@@ -7,21 +7,69 @@ from Analysis.STORM.Calculator.time_series_calculator import TimeSeriesCalculato
 from Analysis.STORM.molecule_merging import MoleculeTracker
 from Data_access.storm_db import STORMDatabaseManager
 
+import json
+import os
+import time
+import pandas as pd
+import streamlit as st
+
+
 class STORMProcessor:
     """
-    A class to manage the processing of STORM files, handling database queries, file selection, 
-    and processing logic through a Streamlit UI.
+    A class to manage the processing of STORM files, handling database queries,
+    file selection, and processing logic through a Streamlit UI.
     """
 
-    def __init__(self, storm_folder):
+    def __init__(self, storm_folder, config_file=None):
         """
         Initializes the STORMProcessor.
 
         Args:
             storm_folder (str): Path to the STORM database folder.
+            config_file (str, optional): Path to STORM processing config JSON.
         """
         self.storm_folder = storm_folder
         self.database = STORMDatabaseManager()
+
+        # Default STORM tracking parameters
+        self.min_frames_locs_to_tracks = 3
+        self.max_gaps_locs_to_tracks = 2
+        self.max_distance_merge_localizations = 200
+        self.max_distance_merge_molecules = 100
+        self.time_series_interval_seconds = 50
+
+        # Load config if provided
+        if config_file is not None:
+            self._load_storm_tracking_config(config_file)
+
+    def _load_storm_tracking_config(self, config_file):
+        """
+        Loads STORM tracking parameters from a JSON configuration file.
+        """
+        try:
+            with open(config_file, "r") as f:
+                config = json.load(f)
+
+            params = config.get("storm_tracking_parameters", {})
+
+            self.min_frames_locs_to_tracks = int(
+                params.get("min_frames_locs_to_tracks", self.min_frames_locs_to_tracks)
+            )
+            self.max_gaps_locs_to_tracks = int(
+                params.get("max_gaps_locs_to_tracks", self.max_gaps_locs_to_tracks)
+            )
+            self.max_distance_merge_localizations = float(
+                params.get("max_distance_merge_localizations", self.max_distance_merge_localizations)
+            )
+            self.max_distance_merge_molecules = float(
+                params.get("max_distance_merge_molecules", self.max_distance_merge_molecules)
+            )
+            self.time_series_interval_seconds = float(
+                params.get("time_series_interval_seconds", self.time_series_interval_seconds)
+            )
+
+        except Exception as e:
+            print(f"Could not load STORM tracking config. Using defaults. Reason: {e}")
 
     def find_unprocessed_files(self):
         """
@@ -102,7 +150,14 @@ class STORMProcessor:
 
             # Step 2: Generating molecules
             step_log.write("🔄 Step 2: Generating molecules...")
-            moltracker = MoleculeTracker(df, 'thunderstorm')
+            moltracker = MoleculeTracker(
+                df,
+                'thunderstorm',
+                min_frames=self.min_frames_locs_to_tracks,
+                max_gaps=self.max_gaps_locs_to_tracks,
+                localization_max_distance=self.max_distance_merge_localizations,
+                max_distance=self.max_distance_merge_molecules
+            )
             molecules = moltracker.process_tracks(step_log)
 
             # Step 3: Saving molecules to database
@@ -115,7 +170,7 @@ class STORMProcessor:
 
             # Step 4: Computing time series
             step_log.write("⏳ Step 4: Computing time series...")
-            time_series_calculator = TimeSeriesCalculator(molecules, interval=50, total_frames=total_frames, exposure_time=exposure_time)
+            time_series_calculator = TimeSeriesCalculator(molecules, interval=self.time_series_interval_seconds, total_frames=total_frames, exposure_time=exposure_time)
             time_series_df = time_series_calculator.calculate_time_series_metrics()
             
             self.database.save_time_series(time_series_df, experiment_id)
