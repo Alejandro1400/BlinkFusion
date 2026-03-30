@@ -13,18 +13,35 @@ class MoleculeTracker:
     Processes tracking events from localized molecules and merges them into molecular representations.
     """
 
-    def __init__(self, df: pd.DataFrame, file_type: str, max_distance=100):
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        file_type: str,
+        min_frames: int = 3,
+        max_gaps: int = 2,
+        localization_max_distance: float = 200,
+        max_distance: float = 100
+    ):
         """
         Initializes the molecule tracker.
 
         Parameters:
         - df (pd.DataFrame): DataFrame containing localizations or tracking data.
         - file_type (str): Type of file ('trackmate' or 'thunderstorm') to determine processing steps.
+        - min_frames (int): Minimum number of frames required to keep a localization track.
+        - max_gaps (int): Maximum allowed frame gaps when merging localizations into tracks.
+        - localization_max_distance (float): Maximum distance for merging localizations into tracks.
+        - max_distance (float): Maximum distance for merging tracks into molecules.
         """
         self.df = df
         self.file_type = file_type
         self.tracks = None
+
+        self.min_frames = min_frames
+        self.max_gaps = max_gaps
+        self.localization_max_distance = localization_max_distance
         self.max_distance = max_distance
+
         self.molecules = []
         self.molecule_id_counter = 1
 
@@ -175,7 +192,11 @@ class MoleculeTracker:
             self.raw_localizations = preprocessor.prepare_columns()
             self.tracks = preprocessor.create_tracking_events()
         elif self.file_type == 'thunderstorm':
-            locstracker = LocalizationTracker()
+            locstracker = LocalizationTracker(
+                min_frames=self.min_frames,
+                max_gaps=self.max_gaps,
+                max_distance=self.localization_max_distance
+            )
             step_log.write("🔄 Step 2.1: Converting localizations into tracks...")
             self.tracks = locstracker.merge_localizations(self.df, step_log)
 
