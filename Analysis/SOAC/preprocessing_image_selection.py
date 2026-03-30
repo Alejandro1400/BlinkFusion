@@ -180,7 +180,13 @@ def detect_ridges(img, config):
         return np.zeros(6)  
 
 
-def preprocessing_image_selection(image_path, config_file, num_ROIs=None, ROI_size=None):
+def preprocessing_image_selection(image_path, config_file, num_ROIs=None, ROI_size=None, weights_initial=None, weights_updated=None):
+    # Default weights (if not provided)
+    if weights_initial is None:
+        weights_initial = np.array([35, 35, 10, 10, 5, 5]) / 100.0
+    if weights_updated is None:
+        weights_updated = np.array([35, 20, 25, 10, 5, 5]) / 100.0
+    
     # Load the configuration
     config = load_json(config_file)
 
@@ -212,7 +218,7 @@ def preprocessing_image_selection(image_path, config_file, num_ROIs=None, ROI_si
     metric_names = ["Number of Ridges", "Ridge/Junction Ratio", "Mean Length", "CV Length", "CV Width", "Mean Intensity"]
     all_metrics_df = pd.DataFrame(all_metrics, columns=metric_names)
     all_metrics_df['ROI'] = [tuple(roi) for roi in ROIs]  # Convert ROIs to tuple for DataFrame storage
-    weights = np.array([35, 35, 10, 10, 5, 5]) / 100.0
+    weights = weights_initial
 
     min_vals = np.min(all_metrics, axis=0)
     max_vals = np.max(all_metrics, axis=0)
@@ -252,7 +258,7 @@ def preprocessing_image_selection(image_path, config_file, num_ROIs=None, ROI_si
 
 
     # Set new weights for the metrics
-    weights = np.array([35, 20, 25, 10, 5, 5]) / 100.0
+    weights = weights_updated
 
     # Standard scale the metrics
     scaled_metrics = (filtered_metrics - np.mean(filtered_metrics, axis=0)) / np.std(filtered_metrics, axis=0)
