@@ -1,0 +1,9 @@
+{
+    "storm_tracking_parameters": {
+        "min_frames_locs_to_tracks": 3,
+        "max_gaps_locs_to_tracks": 2,
+        "max_distance_merge_localizations": 200,
+        "max_distance_merge_molecules": 100,
+        "time_series_interval_seconds": 50
+    }
+}
