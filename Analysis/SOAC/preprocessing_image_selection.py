@@ -190,6 +190,30 @@ def preprocessing_image_selection(image_path, config_file, num_ROIs=None, ROI_si
     # Load the configuration
     config = load_json(config_file)
 
+    try:
+        roi_params = config.pop("roi_selection_parameters", {})  # ← removes it from config immediately
+    
+        if num_ROIs is None:
+            num_ROIs = roi_params.get("num_ROIs", num_ROIs)
+    
+        weights_initial = np.array(
+            roi_params.get("weights_initial", [35, 35, 10, 10, 5, 5]),
+            dtype=float
+        ) / 100.0
+    
+        weights_updated = np.array(
+            roi_params.get("weights_updated", [35, 20, 25, 10, 5, 5]),
+            dtype=float
+        ) / 100.0
+    
+        if len(weights_initial) != 6 or len(weights_updated) != 6:
+            raise ValueError("Weight arrays must contain 6 values.")
+    
+    except Exception as e:
+        print(f"Could not read ROI settings from JSON. Using defaults. Reason: {e}")
+        weights_initial = roi_defaults_initial
+        weights_updated = roi_defaults_updated
+
     # Prepare the image
     image = prepare_image(image_path)
 
