@@ -73,6 +73,3 @@ Repeat for each file to prepare them for your BlinkFusion processing page.
 
 - Maintain the same naming conventions between TIFF and CSV output (`filename_locs.csv`) to streamline automation.
 - Consider enhancing your tutorial with sections on **batch processing using ImageJ macros**, if you want to scale to large datasets.
-
-Let me know if you'd like help structuring batch automation or integration with BlinkFusion next!
-::contentReference[oaicite:6]{index=6}
