@@ -38,9 +38,31 @@ class STORMProcessor:
         self.max_distance_merge_molecules = 100
         self.time_series_interval_seconds = 50
 
-        # Load config if provided
-        if config_file is not None:
+        try:
+            # If user does not provide config path → use repo default
+            if config_file is None:
+                current_dir = os.path.dirname(os.path.abspath(__file__))
+    
+                config_file = os.path.join(
+                    current_dir,
+                    "..",
+                    "Data_access",
+                    "storm_merge_param.json"
+                )
+    
+                config_file = os.path.normpath(config_file)
+    
+            # Check if file exists
+            if not os.path.exists(config_file):
+                raise FileNotFoundError(f"Config file not found: {config_file}")
+    
+            print(f"Using STORM config file: {config_file}")
+    
+            # Load config
             self._load_storm_tracking_config(config_file)
+    
+        except Exception as e:
+            print(f"⚠️ Could not load STORM config. Using default parameters. Reason: {e}")
 
     def _load_storm_tracking_config(self, config_file):
         """
