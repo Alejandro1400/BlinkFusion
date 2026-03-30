@@ -28,7 +28,7 @@
         "save_on_disk": true
     },
     "roi_selection_parameters": {
-        "description": "Weights correspond to: [Number of Ridges, Ridge/Junction Ratio, Mean Length, CV Length, CV Width, Mean Intensity]. CV metrics are inverted during scoring (lower is better).",
+        "description": "Weights correspond to: [Number of Ridges, Ridge/Junction Ratio, Mean Length, CV Length, CV Width, Mean Intensity]. CV metrics are inverted during scoring (lower is better). Sum should be 100",
         "num_ROIs": 16,
         "weights_initial": [35, 35, 10, 10, 5, 5],
         "weights_updated": [35, 20, 25, 10, 5, 5]
